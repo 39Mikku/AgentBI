@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Request
@@ -8,14 +9,14 @@ from fastapi.responses import StreamingResponse
 from AgentBI.src.agents.chat_agent import ChatAgent
 from AgentBI.src.api.dependencies import get_chat_repository
 from AgentBI.src.logging.logging import Logger
-from AgentBI.src.schemas.chat_schema import ChatStreamRequest
+from AgentBI.src.schemas.chat_schema import ChatEditStreamRequest, ChatRetryStreamRequest, ChatStreamRequest
 from AgentBI.src.services.chat_service import ChatService, append_timeline_event, encode_sse_event, format_model_error
 
 router = APIRouter(tags=["chat"])
 logger = Logger.get_logger(__name__)
 
 
-def build_runtime_context(payload: ChatStreamRequest) -> dict[str, str]:
+def build_runtime_context(payload: Any) -> dict[str, str]:
     timezone = payload.timezone or "Asia/Shanghai"
     try:
         now = datetime.now(ZoneInfo(timezone))
@@ -30,24 +31,22 @@ def build_runtime_context(payload: ChatStreamRequest) -> dict[str, str]:
     }
 
 
-@router.post("/chat/stream")
-async def stream_chat(request: Request, payload: ChatStreamRequest):
-    repository = get_chat_repository(request)
-    conversation = repository.get_conversation(payload.conversation_id, payload.user_id)
-    if not conversation:
+def resolve_generation(repository: Any, payload: Any) -> tuple[dict[str, Any], dict[str, Any], str, float, int]:
+    thread = repository.get_conversation(payload.conversation_id, payload.user_id)
+    if not thread:
         raise HTTPException(status_code=404, detail="会话不存在")
-    provider_id = payload.provider_id or conversation.get("provider_id")
+    provider_id = payload.provider_id or thread.get("provider_id")
     if not provider_id:
         raise HTTPException(status_code=400, detail="请先在设置页选择模型提供商")
     provider = repository.get_provider(provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="模型提供商不存在")
-    model = payload.model or conversation.get("model") or provider.get("default_model")
+    model = payload.model or thread.get("model") or provider.get("default_model")
     if not model:
         raise HTTPException(status_code=400, detail="请先选择模型")
-    temperature = payload.temperature if payload.temperature is not None else conversation.get("temperature", 0.7)
-    context_turns = payload.context_turns or conversation.get("context_turns", 8)
-    repository.update_conversation(
+    temperature = payload.temperature if payload.temperature is not None else thread.get("temperature", 0.7)
+    context_turns = payload.context_turns or thread.get("context_turns", 8)
+    thread = repository.update_conversation(
         payload.conversation_id,
         payload.user_id,
         {
@@ -58,19 +57,39 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
         },
     )
     logger.info("聊天请求: provider=%s model=%s temperature=%s context_turns=%s", provider_id, model, temperature, context_turns)
+    return thread, provider, model, temperature, context_turns
 
-    repository.append_message(payload.conversation_id, payload.user_id, "user", payload.content)
-    if not conversation.get("title") or conversation["title"] == "未命名会话":
-        repository.update_conversation(payload.conversation_id, payload.user_id, {"title": payload.content[:36]})
-    context = ChatService(repository).build_context(payload.conversation_id, payload.user_id, context_turns)
-    runtime_context = build_runtime_context(payload)
 
+def model_snapshot(thread: dict[str, Any], provider: dict[str, Any], model: str, temperature: float, context_turns: int) -> dict[str, Any]:
+    return {
+        "provider_id": str(provider["_id"]),
+        "provider_name": provider.get("name"),
+        "model": model,
+        "temperature": temperature,
+        "context_turns": context_turns,
+        "assistant_id": thread.get("assistant_id"),
+    }
+
+
+def stream_assistant(
+    repository: Any,
+    conversation_id: str,
+    assistant_message: dict[str, Any],
+    context: list[dict[str, str]],
+    provider: dict[str, Any],
+    model: str,
+    temperature: float,
+    runtime_context: dict[str, str],
+) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
         reasoning: list[str] = []
-        tool_events: list[dict] = []
-        timeline: list[dict] = []
-        yield encode_sse_event("message_start", {"conversation_id": payload.conversation_id})
+        tool_events: list[dict[str, Any]] = []
+        timeline: list[dict[str, Any]] = []
+        yield encode_sse_event(
+            "message_start",
+            {"conversation_id": conversation_id, "message_id": str(assistant_message["_id"])},
+        )
         try:
             async for event in ChatAgent().stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
@@ -86,26 +105,122 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
                     tool_events.append(event)
                     append_timeline_event(timeline, event_type, event)
                     yield encode_sse_event(event_type, event)
-            message = repository.append_message(
-                payload.conversation_id,
-                payload.user_id,
-                "assistant",
+            message = repository.complete_assistant_message(
+                str(assistant_message["_id"]),
                 "".join(answer) or "工具任务已执行完成。",
                 reasoning_summary="".join(reasoning) or None,
                 tool_events=tool_events,
                 timeline=timeline,
             )
-            yield encode_sse_event("done", {"message_id": str(message["_id"]), "conversation_id": payload.conversation_id})
+            yield encode_sse_event("done", {"message_id": str(message["_id"]), "conversation_id": conversation_id})
         except Exception as error:
             message = format_model_error(error)
-            logger.exception("模型流式调用失败: provider=%s model=%s", provider_id, model)
-            repository.append_message(
-                payload.conversation_id,
-                payload.user_id,
-                "assistant",
-                message,
-                status="error",
+            logger.exception("模型流式调用失败: provider=%s model=%s", provider.get("name"), model)
+            failed = repository.fail_assistant_message(str(assistant_message["_id"]), message)
+            yield encode_sse_event(
+                "error",
+                {"message": message, "message_id": str(failed["_id"]) if failed else None, "conversation_id": conversation_id},
             )
-            yield encode_sse_event("error", {"message": message, "conversation_id": payload.conversation_id})
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return event_stream()
+
+
+@router.post("/chat/stream")
+async def stream_chat(request: Request, payload: ChatStreamRequest):
+    repository = get_chat_repository(request)
+    thread, provider, model, temperature, context_turns = resolve_generation(repository, payload)
+    user_message = repository.create_user_message(payload.conversation_id, payload.user_id, payload.content)
+    if not user_message:
+        raise HTTPException(status_code=404, detail="无法创建用户消息")
+    if not thread.get("title") or thread["title"] == "未命名会话":
+        repository.update_conversation(payload.conversation_id, payload.user_id, {"title": payload.content[:36]})
+    context = ChatService(repository).build_context(payload.conversation_id, payload.user_id, context_turns)
+    assistant_message = repository.create_assistant_message(
+        payload.conversation_id,
+        payload.user_id,
+        str(user_message["_id"]),
+        model_snapshot(thread, provider, model, temperature, context_turns),
+    )
+    if not assistant_message:
+        raise HTTPException(status_code=404, detail="无法创建助手消息")
+    return StreamingResponse(
+        stream_assistant(
+            repository,
+            payload.conversation_id,
+            assistant_message,
+            context,
+            provider,
+            model,
+            temperature,
+            build_runtime_context(payload),
+        ),
+        media_type="text/event-stream",
+    )
+
+
+@router.post("/chat/retry/stream")
+async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
+    repository = get_chat_repository(request)
+    thread, provider, model, temperature, context_turns = resolve_generation(repository, payload)
+    source_path = repository.get_path_to_message(payload.conversation_id, payload.user_id, payload.message_id)
+    source = source_path[-1] if source_path else None
+    if not source or source.get("role") != "assistant" or not source.get("parent_id"):
+        raise HTTPException(status_code=404, detail="助手消息不存在")
+    context = ChatService(repository).build_context_to_message(
+        payload.conversation_id,
+        payload.user_id,
+        str(source["parent_id"]),
+        context_turns,
+    )
+    assistant_message = repository.retry_assistant_message(
+        payload.conversation_id,
+        payload.user_id,
+        payload.message_id,
+        model_snapshot(thread, provider, model, temperature, context_turns),
+    )
+    if not assistant_message:
+        raise HTTPException(status_code=404, detail="无法创建重试版本")
+    return StreamingResponse(
+        stream_assistant(
+            repository,
+            payload.conversation_id,
+            assistant_message,
+            context,
+            provider,
+            model,
+            temperature,
+            build_runtime_context(payload),
+        ),
+        media_type="text/event-stream",
+    )
+
+
+@router.post("/chat/edit/stream")
+async def edit_stream(request: Request, payload: ChatEditStreamRequest):
+    repository = get_chat_repository(request)
+    thread, provider, model, temperature, context_turns = resolve_generation(repository, payload)
+    user_message = repository.edit_user_message(payload.conversation_id, payload.user_id, payload.message_id, payload.content)
+    if not user_message:
+        raise HTTPException(status_code=404, detail="用户消息不存在")
+    context = ChatService(repository).build_context(payload.conversation_id, payload.user_id, context_turns)
+    assistant_message = repository.create_assistant_message(
+        payload.conversation_id,
+        payload.user_id,
+        str(user_message["_id"]),
+        model_snapshot(thread, provider, model, temperature, context_turns),
+    )
+    if not assistant_message:
+        raise HTTPException(status_code=404, detail="无法创建编辑后的助手消息")
+    return StreamingResponse(
+        stream_assistant(
+            repository,
+            payload.conversation_id,
+            assistant_message,
+            context,
+            provider,
+            model,
+            temperature,
+            build_runtime_context(payload),
+        ),
+        media_type="text/event-stream",
+    )

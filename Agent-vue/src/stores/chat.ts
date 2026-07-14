@@ -81,26 +81,80 @@ export const useChatStore = defineStore('chat', () => {
     const index = conversations.value.findIndex((item) => item.id === id)
     if (index !== -1) conversations.value[index] = updated
   }
+
+  function createStreamingMessage(userId: string) {
+    const temporary = reactive<ChatMessage>({
+      id: `temp-${Date.now()}`,
+      conversation_id: activeId.value,
+      user_id: userId,
+      role: 'assistant',
+      content: '',
+      tool_events: [],
+      timeline: [],
+      status: 'streaming',
+    })
+    messages.value.push(temporary)
+    return temporary
+  }
+
+  function consumeStreamEvent(temporary: ChatMessage, event: { event: string; data: Record<string, string> }) {
+    if (event.event === 'message_start' && event.data.message_id) temporary.id = event.data.message_id
+    if (event.event === 'delta') { temporary.content += event.data.content || ''; appendTimeline(temporary, { type: 'delta', content: event.data.content || '' }) }
+    if (event.event === 'reasoning_summary') { temporary.reasoning_summary = `${temporary.reasoning_summary || ''}${event.data.content || ''}`; appendTimeline(temporary, { type: 'reasoning_summary', content: event.data.content || '' }) }
+    if (event.event === 'tool_started' || event.event === 'tool_finished') { temporary.tool_events.push(event.data); appendTimeline(temporary, { type: event.event, tool: event.data.tool || '工具', content: event.data.content }) }
+    if (event.event === 'error') { temporary.status = 'error'; error.value = event.data.message || '生成失败' }
+    if (event.event === 'done') temporary.status = 'complete'
+  }
+
+  async function refreshActiveConversation(userId: string) {
+    conversations.value = await api.listConversations(userId)
+    if (activeId.value) await select(activeId.value, userId)
+  }
+
+  async function runGeneration(
+    userId: string,
+    start: (onEvent: (event: { event: string; data: Record<string, string> }) => void, signal: AbortSignal) => Promise<void>,
+  ) {
+    const temporary = createStreamingMessage(userId)
+    generating.value = true; error.value = ''; controller = new AbortController()
+    try {
+      await start((event) => consumeStreamEvent(temporary, event), controller.signal)
+      await refreshActiveConversation(userId)
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') error.value = err instanceof Error ? err.message : '生成失败'
+      temporary.status = 'error'
+    } finally { generating.value = false; controller = null }
+  }
+
   async function send(userId: string, content: string, runtime: ChatRuntimeContext) {
     if (!content.trim() || generating.value) return
     currentUserId = userId
     if (!activeId.value) await create(userId)
-    const temporary = reactive<ChatMessage>({ id: `temp-${Date.now()}`, conversation_id: activeId.value, user_id: userId, role: 'assistant', content: '', tool_events: [], timeline: [], status: 'streaming' })
-    messages.value.push({ id: `user-${Date.now()}`, conversation_id: activeId.value, user_id: userId, role: 'user', content, tool_events: [], status: 'complete' }, temporary)
-    generating.value = true; error.value = ''; controller = new AbortController()
-    try {
-      await api.streamChat({ user_id: userId, conversation_id: activeId.value, content, ...preferences.value, ...runtime }, (event) => {
-        if (event.event === 'delta') { temporary.content += event.data.content || ''; appendTimeline(temporary, { type: 'delta', content: event.data.content || '' }) }
-        if (event.event === 'reasoning_summary') { temporary.reasoning_summary = `${temporary.reasoning_summary || ''}${event.data.content || ''}`; appendTimeline(temporary, { type: 'reasoning_summary', content: event.data.content || '' }) }
-        if (event.event === 'tool_started' || event.event === 'tool_finished') { temporary.tool_events.push(event.data); appendTimeline(temporary, { type: event.event, tool: event.data.tool || '工具', content: event.data.content }) }
-        if (event.event === 'error') { temporary.status = 'error'; error.value = event.data.message || '生成失败' }
-        if (event.event === 'done') temporary.status = 'complete'
-      }, controller.signal)
-      await load(userId)
-      if (activeId.value) await select(activeId.value, userId)
-    } catch (err) { if ((err as Error).name !== 'AbortError') error.value = err instanceof Error ? err.message : '生成失败'; temporary.status = 'error' } finally { generating.value = false; controller = null }
+    messages.value.push({ id: `user-${Date.now()}`, conversation_id: activeId.value, user_id: userId, role: 'user', content, tool_events: [], status: 'complete' })
+    await runGeneration(userId, (onEvent, signal) => api.streamChat({ user_id: userId, conversation_id: activeId.value, content, ...preferences.value, ...runtime }, onEvent, signal))
+  }
+  async function retry(userId: string, messageId: string, runtime: ChatRuntimeContext) {
+    if (generating.value || !activeId.value) return
+    await runGeneration(userId, (onEvent, signal) => api.streamRetry({ user_id: userId, conversation_id: activeId.value, message_id: messageId, ...preferences.value, ...runtime }, onEvent, signal))
+  }
+  async function edit(userId: string, messageId: string, content: string, runtime: ChatRuntimeContext) {
+    if (generating.value || !activeId.value || !content.trim()) return
+    await runGeneration(userId, (onEvent, signal) => api.streamEdit({ user_id: userId, conversation_id: activeId.value, message_id: messageId, content, ...preferences.value, ...runtime }, onEvent, signal))
+  }
+  async function selectVersion(userId: string, messageId: string) {
+    if (!activeId.value) return
+    const updated = await api.setActiveMessage(activeId.value, userId, messageId)
+    const index = conversations.value.findIndex((item) => item.id === updated.id)
+    if (index !== -1) conversations.value[index] = updated
+    await select(activeId.value, userId)
+  }
+  async function branch(userId: string, messageId: string) {
+    if (!activeId.value) return
+    const conversation = await api.createBranch(activeId.value, userId, messageId)
+    conversations.value.unshift(conversation)
+    await select(conversation.id, userId)
   }
   function stop() { controller?.abort() }
   async function remove(id: string, userId: string) { await api.deleteConversation(id, userId); conversations.value = conversations.value.filter((item) => item.id !== id); if (activeId.value === id) { activeId.value = ''; messages.value = []; clearActiveConversation(userId); if (conversations.value[0]) await select(conversations.value[0].id, userId) } }
-  return { conversations, messages, activeId, loading, generating, error, preferences, activeConversation, load, restorePreferences, persistPreferences, create, select, rename, send, stop, remove }
+  return { conversations, messages, activeId, loading, generating, error, preferences, activeConversation, load, restorePreferences, persistPreferences, create, select, rename, send, retry, edit, selectVersion, branch, stop, remove }
 })

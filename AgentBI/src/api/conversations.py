@@ -1,10 +1,15 @@
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
+from AgentBI.src.api.chat import edit_stream, retry_stream
 from AgentBI.src.api.dependencies import get_chat_repository
 from AgentBI.src.schemas.chat_schema import (
+    ActiveMessageUpdate,
     ChatPreferencesResponse,
     ChatPreferencesUpdate,
     ChatMessageResponse,
+    ChatEditStreamRequest,
+    ChatRetryStreamRequest,
+    ConversationBranchCreate,
     ConversationCreate,
     ConversationResponse,
     ConversationUpdate,
@@ -45,6 +50,41 @@ def list_messages(conversation_id: str, request: Request, user_id: str = Query(m
     if not conversation:
         raise HTTPException(status_code=404, detail="会话不存在")
     return [ChatMessageResponse.from_document(item) for item in repository.list_messages(conversation_id, user_id)]
+
+
+@router.post("/conversations/{conversation_id}/branches", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
+def create_branch(conversation_id: str, request: Request, payload: ConversationBranchCreate):
+    branch = get_chat_repository(request).create_branch_conversation(
+        conversation_id,
+        payload.user_id,
+        payload.source_message_id,
+        payload.title,
+    )
+    if not branch:
+        raise HTTPException(status_code=404, detail="会话或来源消息不存在")
+    return ConversationResponse.from_document(branch)
+
+
+@router.post("/conversations/{conversation_id}/active-message/{message_id}", response_model=ConversationResponse)
+def activate_message(conversation_id: str, message_id: str, request: Request, payload: ActiveMessageUpdate):
+    thread = get_chat_repository(request).set_active_message(conversation_id, payload.user_id, message_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="会话或消息不存在")
+    return ConversationResponse.from_document(thread)
+
+
+@router.post("/conversations/{conversation_id}/messages/{message_id}/edit")
+async def edit_message(conversation_id: str, message_id: str, request: Request, payload: ChatEditStreamRequest):
+    if payload.conversation_id != conversation_id or payload.message_id != message_id:
+        raise HTTPException(status_code=400, detail="请求路径与消息参数不一致")
+    return await edit_stream(request, payload)
+
+
+@router.post("/conversations/{conversation_id}/messages/{message_id}/retry")
+async def retry_message(conversation_id: str, message_id: str, request: Request, payload: ChatRetryStreamRequest):
+    if payload.conversation_id != conversation_id or payload.message_id != message_id:
+        raise HTTPException(status_code=400, detail="请求路径与消息参数不一致")
+    return await retry_stream(request, payload)
 
 
 @router.patch("/conversations/{conversation_id}", response_model=ConversationResponse)

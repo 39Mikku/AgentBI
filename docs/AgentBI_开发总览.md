@@ -1,7 +1,7 @@
 # AgentBI 开发总览
 
 > 更新日期：2026-07-14  
-> 当前阶段：一期聊天工作台、OpenAI-compatible 接入、Mongo 会话持久化、邮件子代理编排已落地。
+> 当前阶段：一期聊天工作台、OpenAI-compatible 接入、Mongo 消息 DAG、邮件子代理编排已落地。
 
 ## 1. 项目定位
 
@@ -65,7 +65,8 @@ PythonProject5/
 
 - 会话创建、删除、历史加载、消息持久化。
 - 页面刷新后自动加载历史会话；优先恢复上次打开的会话，找不到时打开最新会话。
-- 按配置的上下文轮次截取最近消息发送给模型。
+- 会话消息采用 `parent_id` 邻接表 DAG；上下文只从 `active_message_id` 回溯的选中链截取，不混入其他版本。
+- 支持助手重试版本、用户消息编辑后重新生成、版本箭头切换，以及从任意消息创建独立分支会话。
 - OpenAI-compatible 流式调用，前端逐段渲染正文与推理摘要。
 - 回复时间线按实际顺序展示并存储：正文、工具开始、工具结果、子代理、后续正文可交错出现。
 - 模型调用失败会持久化为错误消息，而不是让临时回复消失。
@@ -96,14 +97,17 @@ PythonProject5/
 |---|---|---|
 | `provider_profiles` | 模型提供商配置 | `name`、`base_url`、`api_key`、`default_model`、`available_models` |
 | `chat_preferences` | 用户全局聊天偏好 | `user_id`、`provider_id`、`model`、`temperature`、`context_turns` |
-| `conversations` | 会话元数据 | `user_id`、标题、模型配置、时间戳 |
-| `messages` | 会话消息 | `role`、`content`、`timeline`、`tool_events`、`reasoning_summary` |
+| `chat_threads` | 会话元数据与活跃分支指针 | `user_id`、标题、模型配置、`active_message_id`、来源会话/消息 |
+| `chat_messages` | 消息 DAG 节点 | `thread_id`、`parent_id`、`role`、`content`、版本组、时间线、模型快照 |
+| `chat_runs` | 每次助手生成的运行快照 | `message_id`、提供商/模型/温度/上下文快照、状态、时间戳 |
+| `conversations` / `messages` | 一期旧数据 | 保留，不再由新代码读取或写入 |
 
 现有索引：
 
 - `chat_preferences(user_id)` 唯一索引
-- `conversations(user_id, last_message_at)`
-- `messages(conversation_id, created_at)`
+- `chat_threads(user_id, last_message_at)`
+- `chat_messages(thread_id, parent_id, created_at)`
+- `chat_runs(thread_id, message_id)` 唯一索引
 
 ## 6. API 摘要
 
@@ -124,7 +128,7 @@ PythonProject5/
 |---|---|
 | Git 仓库初始化 | 已完成，本地尚未建立提交 |
 | Vue 聊天工作台与现代化布局 | 已完成 |
-| 会话、消息、时间线 Mongo 持久化 | 已完成 |
+| 消息 DAG、版本控制、分支会话 Mongo 持久化 | 已完成 |
 | OpenAI-compatible 多提供商与模型选择 | 已完成 |
 | 用户偏好持久化与活跃会话恢复 | 已完成 |
 | 邮件子代理编排 | 已完成一期实现 |

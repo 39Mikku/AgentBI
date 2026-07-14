@@ -15,6 +15,10 @@ class ChatRouteTests(unittest.TestCase):
 
         self.assertIn("/chat/stream", chat_paths)
         self.assertIn("/conversations", conversation_paths)
+        self.assertIn("/conversations/{conversation_id}/branches", conversation_paths)
+        self.assertIn("/conversations/{conversation_id}/active-message/{message_id}", conversation_paths)
+        self.assertIn("/conversations/{conversation_id}/messages/{message_id}/edit", conversation_paths)
+        self.assertIn("/conversations/{conversation_id}/messages/{message_id}/retry", conversation_paths)
         self.assertIn("/chat/preferences", conversation_paths)
         self.assertIn("/providers", provider_paths)
         self.assertIn("/user-profile", user_profile_paths)

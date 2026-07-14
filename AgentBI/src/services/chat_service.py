@@ -14,6 +14,11 @@ def build_context_messages(messages: list[dict[str, Any]], context_turns: int) -
     ]
 
 
+def build_active_path_context_messages(active_path: list[dict[str, Any]], context_turns: int) -> list[dict[str, str]]:
+    """Build model context from one selected root-to-leaf path in the message DAG."""
+    return build_context_messages(active_path, context_turns)
+
+
 def encode_sse_event(event: str, payload: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
 
@@ -44,4 +49,19 @@ class ChatService:
         self.repository = repository
 
     def build_context(self, conversation_id: str, user_id: str, context_turns: int) -> list[dict[str, str]]:
-        return build_context_messages(self.repository.list_messages(conversation_id, user_id), context_turns)
+        return build_active_path_context_messages(
+            self.repository.get_active_path(conversation_id, user_id),
+            context_turns,
+        )
+
+    def build_context_to_message(
+        self,
+        conversation_id: str,
+        user_id: str,
+        message_id: str,
+        context_turns: int,
+    ) -> list[dict[str, str]]:
+        return build_active_path_context_messages(
+            self.repository.get_path_to_message(conversation_id, user_id, message_id),
+            context_turns,
+        )

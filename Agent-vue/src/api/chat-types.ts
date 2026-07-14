@@ -17,6 +17,9 @@ export interface Conversation {
   created_at?: string
   updated_at?: string
   last_message_at?: string
+  active_message_id?: string | null
+  source_thread_id?: string | null
+  source_message_id?: string | null
 }
 
 export interface ChatMessage {
@@ -30,6 +33,11 @@ export interface ChatMessage {
   timeline?: ChatTimelineEvent[]
   status: 'complete' | 'streaming' | 'error'
   created_at?: string
+  parent_id?: string | null
+  sibling_count?: number
+  sibling_index?: number
+  version_ids?: string[]
+  model_snapshot?: Record<string, unknown>
 }
 
 export interface ChatTimelineEvent {
@@ -54,4 +62,13 @@ export interface ChatRuntimeContext {
 export interface ChatStreamEvent {
   event: string
   data: Record<string, string>
+}
+
+export type ChatGenerationPayload = {
+  user_id: string
+  conversation_id: string
+} & Partial<ChatPreferences> & ChatRuntimeContext
+
+export type MessageGenerationPayload = ChatGenerationPayload & {
+  message_id: string
 }
