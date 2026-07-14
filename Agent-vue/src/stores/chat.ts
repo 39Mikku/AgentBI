@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api/chat'
 import type { ChatMessage, ChatPreferences, ChatRuntimeContext, ChatTimelineEvent, Conversation } from '@/api/chat-types'
@@ -50,6 +50,7 @@ export const useChatStore = defineStore('chat', () => {
   async function load(userId: string) {
     loading.value = true; syncMessage.value = '正在同步会话…'
     try {
+      await nextTick()
       await restorePreferences(userId)
       conversations.value = await api.listConversations(userId)
       const restoredId = localStorage.getItem(activeStorageKey(userId))
@@ -72,6 +73,7 @@ export const useChatStore = defineStore('chat', () => {
     currentUserId = userId
     syncMessage.value = '正在创建新会话…'
     try {
+      await nextTick()
       const conversation = await api.createConversation({ user_id: userId, title: '未命名会话', temperature: preferences.value.temperature, context_turns: preferences.value.contextTurns, provider_id: preferences.value.providerId, model: preferences.value.model })
       conversations.value.unshift(conversation); activeId.value = conversation.id; messages.value = []; saveActiveConversation(userId, conversation.id)
     } finally { syncMessage.value = '' }
@@ -80,6 +82,7 @@ export const useChatStore = defineStore('chat', () => {
     const ownsMessage = Boolean(syncMessage.value)
     if (!ownsMessage) syncMessage.value = '正在加载会话…'
     try {
+      if (!ownsMessage) await nextTick()
       currentUserId = userId; activeId.value = id; saveActiveConversation(userId, id); messages.value = await api.listMessages(id, userId)
     } finally { if (!ownsMessage) syncMessage.value = '' }
   }
@@ -154,6 +157,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!activeId.value) return
     syncMessage.value = '正在切换消息版本…'
     try {
+      await nextTick()
       const updated = await api.setActiveMessage(activeId.value, userId, messageId)
       const index = conversations.value.findIndex((item) => item.id === updated.id)
       if (index !== -1) conversations.value[index] = updated
@@ -164,6 +168,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!activeId.value) return
     syncMessage.value = '正在创建分支会话…'
     try {
+      await nextTick()
       const conversation = await api.createBranch(activeId.value, userId, messageId)
       conversations.value.unshift(conversation)
       await select(conversation.id, userId)
