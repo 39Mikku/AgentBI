@@ -31,9 +31,12 @@ onMounted(() => {
   }
 })
 
-watch(() => auth.isAuthenticated, (authenticated) => {
-  if (authenticated) router.replace('/chat')
-})
+watch(
+  () => auth.isAuthenticated,
+  (authenticated) => {
+    if (authenticated) router.replace('/chat')
+  },
+)
 </script>
 
 <template>
@@ -49,8 +52,19 @@ watch(() => auth.isAuthenticated, (authenticated) => {
         <div class="brand-mark">
           <span class="brand-glyph">
             <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <path d="M16 3l11 6v14l-11 6L5 23V9l11-6z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-              <path d="M16 3v26M5 9l11 6 11-6M5 23l11-6 11 6" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" opacity="0.55" />
+              <path
+                d="M16 3l11 6v14l-11 6L5 23V9l11-6z"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M16 3v26M5 9l11 6 11-6M5 23l11-6 11 6"
+                stroke="currentColor"
+                stroke-width="1.1"
+                stroke-linejoin="round"
+                opacity="0.55"
+              />
               <circle cx="16" cy="15" r="2.4" fill="currentColor" />
             </svg>
           </span>
@@ -89,7 +103,12 @@ watch(() => auth.isAuthenticated, (authenticated) => {
     <!-- ===== right: form panel ===== -->
     <section class="auth-panel">
       <div class="panel-top">
-        <span class="panel-brand">AgentBI</span>
+        <div class="panel-brand-group">
+          <span class="panel-brand">AgentBI</span>
+          <button class="home-link" type="button" @click="router.push('/')">
+            <span aria-hidden="true">←</span> 返回首页
+          </button>
+        </div>
         <ThemeToggle />
       </div>
 
@@ -105,7 +124,8 @@ watch(() => auth.isAuthenticated, (authenticated) => {
               输入你的邮箱地址，系统将经由智能体核验后发送一次性验证码。
             </template>
             <template v-else>
-              验证码已发送至 <span class="email-chip">{{ auth.email }}</span>，请查收邮件并填入下方。
+              验证码已发送至 <span class="email-chip">{{ auth.email }}</span
+              >，请查收邮件并填入下方。
             </template>
           </p>
         </div>
@@ -115,7 +135,16 @@ watch(() => auth.isAuthenticated, (authenticated) => {
           <label class="field" :class="{ invalid: auth.email.length > 0 && !emailValid }">
             <span class="field-label">邮箱地址 / 用户名</span>
             <div class="field-control">
-              <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg
+                class="field-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
                 <rect x="3" y="5" width="18" height="14" rx="2.5" />
                 <path d="M4 7l8 6 8-6" />
               </svg>
@@ -142,7 +171,17 @@ watch(() => auth.isAuthenticated, (authenticated) => {
           >
             <span v-if="auth.sending" class="spinner" aria-hidden="true"></span>
             <span>{{ auth.sending ? '发送中…' : '发送验证码' }}</span>
-            <svg v-if="!auth.sending" class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              v-if="!auth.sending"
+              class="btn-arrow"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>
           </button>
@@ -166,17 +205,40 @@ watch(() => auth.isAuthenticated, (authenticated) => {
             </div>
           </label>
 
-          <button class="btn-primary" type="button" :disabled="!auth.canLogin" @click="auth.handleLogin">
+          <button
+            class="btn-primary"
+            type="button"
+            :disabled="!auth.canLogin"
+            @click="auth.handleLogin"
+          >
             <span v-if="auth.logging" class="spinner" aria-hidden="true"></span>
             <span>{{ auth.logging ? '核验中…' : '登录控制台' }}</span>
-            <svg v-if="!auth.logging" class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              v-if="!auth.logging"
+              class="btn-arrow"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>
           </button>
 
           <div class="step-foot">
             <button class="link-btn" type="button" @click="auth.backToEmail">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M19 12H5M11 18l-6-6 6-6" />
               </svg>
               更换邮箱
@@ -195,7 +257,15 @@ watch(() => auth.isAuthenticated, (authenticated) => {
         <!-- alerts -->
         <Transition name="alert">
           <div v-if="auth.errorMsg" class="alert alert-error" role="alert">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <circle cx="12" cy="12" r="9" />
               <path d="M12 8v4M12 16h.01" />
             </svg>
@@ -204,7 +274,15 @@ watch(() => auth.isAuthenticated, (authenticated) => {
         </Transition>
         <Transition name="alert">
           <div v-if="auth.successMsg" class="alert alert-success" role="status">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
               <circle cx="12" cy="12" r="9" />
               <path d="M8.5 12.5l2.5 2.5 4.5-5" />
             </svg>
@@ -214,7 +292,15 @@ watch(() => auth.isAuthenticated, (authenticated) => {
       </div>
 
       <div class="panel-footer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
           <path d="M12 3l7 3v5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-3z" />
         </svg>
         <span>验证码经加密通道传输，登录态仅存于本地浏览器</span>
@@ -367,7 +453,9 @@ watch(() => auth.isAuthenticated, (authenticated) => {
   border-radius: 0.85rem;
   background: rgba(255, 255, 255, 0.025);
   backdrop-filter: blur(6px);
-  transition: border-color 0.3s ease, background-color 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    background-color 0.3s ease;
 }
 .feature-item:hover {
   border-color: rgba(0, 122, 255, 0.4);
@@ -430,12 +518,36 @@ watch(() => auth.isAuthenticated, (authenticated) => {
   justify-content: space-between;
   padding: 1.5rem clamp(1.5rem, 4vw, 3rem);
 }
+.panel-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
 .panel-brand {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 1.05rem;
   letter-spacing: -0.01em;
   color: var(--foreground);
+}
+.home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+.home-link:hover {
+  color: var(--primary);
+  transform: translateX(-2px);
 }
 
 .panel-form {
@@ -469,7 +581,11 @@ watch(() => auth.isAuthenticated, (authenticated) => {
   width: 28px;
   height: 2px;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 20%, transparent));
+  background: linear-gradient(
+    90deg,
+    var(--primary),
+    color-mix(in srgb, var(--primary) 20%, transparent)
+  );
 }
 .form-title {
   font-family: var(--font-display);
@@ -517,7 +633,9 @@ watch(() => auth.isAuthenticated, (authenticated) => {
   border-radius: var(--radius);
   background: var(--card);
   box-shadow: var(--shadow-xs);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 .field-control:focus-within {
   border-color: var(--ring);
@@ -585,7 +703,10 @@ watch(() => auth.isAuthenticated, (authenticated) => {
   letter-spacing: 0.01em;
   cursor: pointer;
   box-shadow: var(--shadow-md);
-  transition: filter 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+  transition:
+    filter 0.18s ease,
+    transform 0.18s ease,
+    opacity 0.18s ease;
 }
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.06);
@@ -670,7 +791,9 @@ watch(() => auth.isAuthenticated, (authenticated) => {
 
 .alert-enter-active,
 .alert-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 .alert-enter-from,
 .alert-leave-to {

@@ -13,6 +13,12 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
+      component: () => import('@/views/LandingView.vue'),
+      meta: { title: 'AgentBI · 智能体工作台' },
+    },
+    {
+      path: '/login',
+      name: 'login',
       component: () => import('@/views/HomeView.vue'),
       meta: { title: '登录 · AgentBI' },
     },
@@ -43,8 +49,8 @@ const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.isAuthenticated)
-    return { name: 'home', query: { redirect: to.fullPath } }
-  if (to.name === 'home' && auth.isAuthenticated) return { name: 'chat' }
+    return { name: 'login', query: { redirect: to.fullPath } }
+  if ((to.name === 'home' || to.name === 'login') && auth.isAuthenticated) return { name: 'chat' }
   return true
 })
 router.afterEach((to) => {
