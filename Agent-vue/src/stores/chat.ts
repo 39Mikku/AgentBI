@@ -1,7 +1,8 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import * as api from '@/api/chat'
 import type { ChatMessage, ChatPreferences, ChatRuntimeContext, ChatTimelineEvent, Conversation } from '@/api/chat-types'
+import { replaceTimelineBranch } from '@/utils/message-branch'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -95,7 +96,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function createStreamingMessage(userId: string) {
-    const temporary = reactive<ChatMessage>({
+    return reactive<ChatMessage>({
       id: `temp-${Date.now()}`,
       conversation_id: activeId.value,
       user_id: userId,
@@ -105,6 +106,31 @@ export const useChatStore = defineStore('chat', () => {
       timeline: [],
       status: 'streaming',
     })
+  }
+
+  function createOptimisticEditedMessage(userId: string, messageId: string, content: string) {
+    const original = messages.value.find((message) => message.id === messageId)
+    return reactive<ChatMessage>({
+      ...(original || {
+        conversation_id: activeId.value,
+        user_id: userId,
+        role: 'user' as const,
+        parent_id: null,
+      }),
+      id: `temp-user-${Date.now()}`,
+      conversation_id: activeId.value,
+      user_id: userId,
+      role: 'user',
+      content,
+      reasoning_summary: null,
+      tool_events: [],
+      timeline: [],
+      status: 'complete',
+    })
+  }
+
+  function appendStreamingMessage(userId: string) {
+    const temporary = createStreamingMessage(userId)
     messages.value.push(temporary)
     return temporary
   }
@@ -126,8 +152,9 @@ export const useChatStore = defineStore('chat', () => {
   async function runGeneration(
     userId: string,
     start: (onEvent: (event: { event: string; data: Record<string, string> }) => void, signal: AbortSignal) => Promise<void>,
+    placeTemporary: () => ChatMessage = () => appendStreamingMessage(userId),
   ) {
-    const temporary = createStreamingMessage(userId)
+    const temporary = placeTemporary()
     generating.value = true; error.value = ''; controller = new AbortController()
     try {
       await start((event) => consumeStreamEvent(temporary, event), controller.signal)
@@ -147,11 +174,36 @@ export const useChatStore = defineStore('chat', () => {
   }
   async function retry(userId: string, messageId: string, runtime: ChatRuntimeContext) {
     if (generating.value || !activeId.value) return
-    await runGeneration(userId, (onEvent, signal) => api.streamRetry({ user_id: userId, conversation_id: activeId.value, message_id: messageId, ...preferences.value, ...runtime }, onEvent, signal))
+    if (!messages.value.some((message) => message.id === messageId)) {
+      error.value = '未能定位要重试的消息，请刷新会话后重试'
+      return
+    }
+    await runGeneration(
+      userId,
+      (onEvent, signal) => api.streamRetry({ user_id: userId, conversation_id: activeId.value, message_id: messageId, ...preferences.value, ...runtime }, onEvent, signal),
+      () => {
+        const temporary = createStreamingMessage(userId)
+        messages.value = replaceTimelineBranch(messages.value, messageId, [temporary])
+        return temporary
+      },
+    )
   }
   async function edit(userId: string, messageId: string, content: string, runtime: ChatRuntimeContext) {
     if (generating.value || !activeId.value || !content.trim()) return
-    await runGeneration(userId, (onEvent, signal) => api.streamEdit({ user_id: userId, conversation_id: activeId.value, message_id: messageId, content, ...preferences.value, ...runtime }, onEvent, signal))
+    if (!messages.value.some((message) => message.id === messageId)) {
+      error.value = '未能定位要编辑的消息，请刷新会话后重试'
+      return
+    }
+    await runGeneration(
+      userId,
+      (onEvent, signal) => api.streamEdit({ user_id: userId, conversation_id: activeId.value, message_id: messageId, content, ...preferences.value, ...runtime }, onEvent, signal),
+      () => {
+        const editedUser = createOptimisticEditedMessage(userId, messageId, content)
+        const temporary = createStreamingMessage(userId)
+        messages.value = replaceTimelineBranch(messages.value, messageId, [editedUser, temporary])
+        return temporary
+      },
+    )
   }
   async function selectVersion(userId: string, messageId: string) {
     if (!activeId.value) return
@@ -178,3 +230,7 @@ export const useChatStore = defineStore('chat', () => {
   async function remove(id: string, userId: string) { await api.deleteConversation(id, userId); conversations.value = conversations.value.filter((item) => item.id !== id); if (activeId.value === id) { activeId.value = ''; messages.value = []; clearActiveConversation(userId); if (conversations.value[0]) await select(conversations.value[0].id, userId) } }
   return { conversations, messages, activeId, loading, generating, isSyncing, syncMessage, error, preferences, activeConversation, load, restorePreferences, persistPreferences, create, select, rename, send, retry, edit, selectVersion, branch, stop, remove }
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useChatStore, import.meta.hot))
+}
