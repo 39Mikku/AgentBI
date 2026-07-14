@@ -31,10 +31,13 @@ def build_runtime_context(payload: Any) -> dict[str, str]:
     }
 
 
-def resolve_generation(repository: Any, payload: Any) -> tuple[dict[str, Any], dict[str, Any], str, float, int]:
+def resolve_generation(repository: Any, payload: Any) -> tuple[dict[str, Any], dict[str, Any], str, float, int, dict[str, Any]]:
     thread = repository.get_conversation(payload.conversation_id, payload.user_id)
     if not thread:
         raise HTTPException(status_code=404, detail="会话不存在")
+    assistant = repository.get_assistant(thread.get("assistant_id"), payload.user_id) or repository.ensure_default_assistant(payload.user_id)
+    if thread.get("assistant_id") != assistant["_id"]:
+        thread = repository.update_conversation(payload.conversation_id, payload.user_id, {"assistant_id": assistant["_id"]}) or thread
     provider_id = payload.provider_id or thread.get("provider_id")
     if not provider_id:
         raise HTTPException(status_code=400, detail="请先在设置页选择模型提供商")
@@ -57,17 +60,17 @@ def resolve_generation(repository: Any, payload: Any) -> tuple[dict[str, Any], d
         },
     )
     logger.info("聊天请求: provider=%s model=%s temperature=%s context_turns=%s", provider_id, model, temperature, context_turns)
-    return thread, provider, model, temperature, context_turns
+    return thread, provider, model, temperature, context_turns, assistant
 
 
-def model_snapshot(thread: dict[str, Any], provider: dict[str, Any], model: str, temperature: float, context_turns: int) -> dict[str, Any]:
+def model_snapshot(thread: dict[str, Any], provider: dict[str, Any], model: str, temperature: float, context_turns: int, assistant: dict[str, Any]) -> dict[str, Any]:
     return {
         "provider_id": str(provider["_id"]),
         "provider_name": provider.get("name"),
         "model": model,
         "temperature": temperature,
         "context_turns": context_turns,
-        "assistant_id": thread.get("assistant_id"),
+        "assistant_id": str(assistant["_id"]),
     }
 
 
@@ -102,6 +105,7 @@ def stream_assistant(
     temperature: float,
     runtime_context: dict[str, str],
     conversation_title: str,
+    assistant: dict[str, Any],
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -113,7 +117,7 @@ def stream_assistant(
             build_message_start_payload(conversation_id, assistant_message, conversation_title),
         )
         try:
-            async for event in ChatAgent().stream(context, provider, model, temperature, runtime_context):
+            async for event in ChatAgent(assistant.get("system_prompt"), assistant.get("capability_ids", []), assistant.get("include_runtime_context", True)).stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
                     answer.append(event["content"])
@@ -150,7 +154,7 @@ def stream_assistant(
 @router.post("/chat/stream")
 async def stream_chat(request: Request, payload: ChatStreamRequest):
     repository = get_chat_repository(request)
-    thread, provider, model, temperature, context_turns = resolve_generation(repository, payload)
+    thread, provider, model, temperature, context_turns, assistant = resolve_generation(repository, payload)
     user_message = repository.create_user_message(payload.conversation_id, payload.user_id, payload.content)
     if not user_message:
         raise HTTPException(status_code=404, detail="无法创建用户消息")
@@ -165,7 +169,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
         payload.conversation_id,
         payload.user_id,
         str(user_message["_id"]),
-        model_snapshot(thread, provider, model, temperature, context_turns),
+        model_snapshot(thread, provider, model, temperature, context_turns, assistant),
     )
     if not assistant_message:
         raise HTTPException(status_code=404, detail="无法创建助手消息")
@@ -180,6 +184,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             temperature,
             build_runtime_context(payload),
             thread.get("title", ""),
+            assistant,
         ),
         media_type="text/event-stream",
     )
@@ -188,7 +193,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
 @router.post("/chat/retry/stream")
 async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
     repository = get_chat_repository(request)
-    thread, provider, model, temperature, context_turns = resolve_generation(repository, payload)
+    thread, provider, model, temperature, context_turns, assistant = resolve_generation(repository, payload)
     source_path = repository.get_path_to_message(payload.conversation_id, payload.user_id, payload.message_id)
     source = source_path[-1] if source_path else None
     if not source or source.get("role") != "assistant" or not source.get("parent_id"):
@@ -203,7 +208,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
         payload.conversation_id,
         payload.user_id,
         payload.message_id,
-        model_snapshot(thread, provider, model, temperature, context_turns),
+        model_snapshot(thread, provider, model, temperature, context_turns, assistant),
     )
     if not assistant_message:
         raise HTTPException(status_code=404, detail="无法创建重试版本")
@@ -218,6 +223,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             temperature,
             build_runtime_context(payload),
             thread.get("title", ""),
+            assistant,
         ),
         media_type="text/event-stream",
     )
@@ -226,7 +232,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
 @router.post("/chat/edit/stream")
 async def edit_stream(request: Request, payload: ChatEditStreamRequest):
     repository = get_chat_repository(request)
-    thread, provider, model, temperature, context_turns = resolve_generation(repository, payload)
+    thread, provider, model, temperature, context_turns, assistant = resolve_generation(repository, payload)
     user_message = repository.edit_user_message(payload.conversation_id, payload.user_id, payload.message_id, payload.content)
     if not user_message:
         raise HTTPException(status_code=404, detail="用户消息不存在")
@@ -235,7 +241,7 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
         payload.conversation_id,
         payload.user_id,
         str(user_message["_id"]),
-        model_snapshot(thread, provider, model, temperature, context_turns),
+        model_snapshot(thread, provider, model, temperature, context_turns, assistant),
     )
     if not assistant_message:
         raise HTTPException(status_code=404, detail="无法创建编辑后的助手消息")
@@ -250,6 +256,7 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             temperature,
             build_runtime_context(payload),
             thread.get("title", ""),
+            assistant,
         ),
         media_type="text/event-stream",
     )

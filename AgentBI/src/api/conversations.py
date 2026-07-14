@@ -31,16 +31,21 @@ def save_preferences(request: Request, payload: ChatPreferencesUpdate, user_id: 
 
 
 @router.get("/conversations", response_model=list[ConversationResponse])
-def list_conversations(request: Request, user_id: str = Query(min_length=1)):
+def list_conversations(request: Request, user_id: str = Query(min_length=1), assistant_id: str | None = None):
     repository = get_chat_repository(request)
-    return [ConversationResponse.from_document(item) for item in repository.list_conversations(user_id)]
+    return [ConversationResponse.from_document(item) for item in repository.list_conversations(user_id, assistant_id)]
 
 
 @router.post("/conversations", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
 def create_conversation(request: Request, payload: ConversationCreate):
+    repository = get_chat_repository(request)
     document = payload.model_dump()
     document["title"] = document["title"] or "未命名会话"
-    return ConversationResponse.from_document(get_chat_repository(request).create_conversation(document))
+    assistant = repository.get_assistant(document.get("assistant_id"), payload.user_id) if document.get("assistant_id") else repository.ensure_default_assistant(payload.user_id)
+    if not assistant:
+        raise HTTPException(status_code=404, detail="助手不存在")
+    document["assistant_id"] = assistant["_id"]
+    return ConversationResponse.from_document(repository.create_conversation(document))
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[ChatMessageResponse])

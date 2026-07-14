@@ -11,6 +11,7 @@ class ConversationCreate(BaseModel):
     model: str | None = Field(default=None, max_length=200)
     temperature: float = Field(default=0.7, ge=0, le=2)
     context_turns: int = Field(default=8, ge=0, le=128)
+    assistant_id: str | None = None
 
 
 class ConversationUpdate(BaseModel):
@@ -56,6 +57,7 @@ class ConversationResponse(BaseModel):
     active_message_id: str | None = None
     source_thread_id: str | None = None
     source_message_id: str | None = None
+    assistant_id: str | None = None
 
     @classmethod
     def from_document(cls, document: dict[str, Any]) -> "ConversationResponse":
@@ -73,6 +75,7 @@ class ConversationResponse(BaseModel):
             active_message_id=str(document["active_message_id"]) if document.get("active_message_id") else None,
             source_thread_id=str(document["source_thread_id"]) if document.get("source_thread_id") else None,
             source_message_id=str(document["source_message_id"]) if document.get("source_message_id") else None,
+            assistant_id=str(document["assistant_id"]) if document.get("assistant_id") else None,
         )
 
 

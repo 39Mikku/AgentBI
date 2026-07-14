@@ -8,7 +8,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export const listConversations = (userId: string) => json<Conversation[]>(`/conversations?user_id=${encodeURIComponent(userId)}`)
+export const listConversations = (userId: string, assistantId?: string) => json<Conversation[]>(`/conversations?user_id=${encodeURIComponent(userId)}${assistantId ? `&assistant_id=${encodeURIComponent(assistantId)}` : ''}`)
 export const createConversation = (payload: Partial<Conversation> & { user_id: string }) =>
   json<Conversation>('/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
 export const updateConversation = (id: string, userId: string, payload: Partial<Conversation>) =>

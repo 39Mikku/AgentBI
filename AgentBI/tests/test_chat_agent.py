@@ -40,6 +40,17 @@ class ChatAgentTests(unittest.TestCase):
         self.assertIn("Elysi", wrapped[-1]["content"])
         self.assertTrue(wrapped[-1]["content"].endswith("what time is it?\n</user_request>"))
 
+    def test_runtime_context_can_be_disabled_without_leaving_prompt_instructions(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        messages = ChatAgent("answer tersely", [], include_runtime_context=False).build_request_messages(
+            [{"role": "user", "content": "hello"}],
+            {"current_time": "2026-07-14 16:30:00"},
+        )
+
+        self.assertNotIn("runtime_context", messages[0]["content"])
+        self.assertEqual(messages[1]["content"], "hello")
+
 
 if __name__ == "__main__":
     unittest.main()

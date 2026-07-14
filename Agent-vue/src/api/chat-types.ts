@@ -20,6 +20,20 @@ export interface Conversation {
   active_message_id?: string | null
   source_thread_id?: string | null
   source_message_id?: string | null
+  assistant_id?: string | null
+}
+
+export interface AssistantProfile {
+  id: string
+  user_id: string
+  name: string
+  system_prompt: string
+  capability_ids: string[]
+  avatar_data_url?: string | null
+  include_runtime_context: boolean
+  is_default: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface ChatMessage {
@@ -67,7 +81,8 @@ export interface ChatStreamEvent {
 export type ChatGenerationPayload = {
   user_id: string
   conversation_id: string
-} & Partial<ChatPreferences> & ChatRuntimeContext
+} & Partial<ChatPreferences> &
+  ChatRuntimeContext
 
 export type MessageGenerationPayload = ChatGenerationPayload & {
   message_id: string

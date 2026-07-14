@@ -7,6 +7,8 @@ from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
 from pymongo.database import Database
 
+from AgentBI.src.agents.assistant_registry import DEFAULT_ASSISTANT_CAPABILITIES, DEFAULT_ASSISTANT_PROMPT
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -27,6 +29,7 @@ class ChatRepository:
         self.preferences = db["chat_preferences"]
         self.user_profiles = db["user_profiles"]
         self.users = db["users"]
+        self.assistants = db["assistants"]
 
         # Phase-one collections are intentionally retained as untouched historical data.
         self.legacy_conversations = db["conversations"]
@@ -38,6 +41,7 @@ class ChatRepository:
 
     def ensure_indexes(self) -> None:
         self.preferences.create_index("user_id", unique=True)
+        self.assistants.create_index([("user_id", ASCENDING), ("is_default", ASCENDING)])
         self.user_profiles.create_index("user_id", unique=True)
         self.threads.create_index([("user_id", ASCENDING), ("last_message_at", DESCENDING)])
         self.threads.create_index([("source_thread_id", ASCENDING), ("source_message_id", ASCENDING)])
@@ -107,6 +111,59 @@ class ChatRepository:
 
     # Thread and DAG persistence -----------------------------------------------------
 
+    def ensure_default_assistant(self, user_id: str) -> dict[str, Any]:
+        assistant = self.assistants.find_one({"user_id": user_id, "is_default": True})
+        if not assistant:
+            now = utc_now()
+            result = self.assistants.insert_one({
+                "user_id": user_id,
+                "name": "默认助手",
+                "system_prompt": DEFAULT_ASSISTANT_PROMPT,
+                "capability_ids": DEFAULT_ASSISTANT_CAPABILITIES,
+                "avatar_data_url": None,
+                "include_runtime_context": True,
+                "is_default": True,
+                "created_at": now,
+                "updated_at": now,
+            })
+            assistant = self.assistants.find_one({"_id": result.inserted_id})
+        self.threads.update_many(
+            {"user_id": user_id, "$or": [{"assistant_id": {"$exists": False}}, {"assistant_id": None}]},
+            {"$set": {"assistant_id": assistant["_id"]}},
+        )
+        return assistant
+
+    def list_assistants(self, user_id: str) -> list[dict[str, Any]]:
+        self.ensure_default_assistant(user_id)
+        return list(self.assistants.find({"user_id": user_id}).sort([("is_default", DESCENDING), ("created_at", ASCENDING)]))
+
+    def get_assistant(self, assistant_id: str | ObjectId | None, user_id: str) -> dict[str, Any] | None:
+        object_id = as_object_id(assistant_id)
+        return self.assistants.find_one({"_id": object_id, "user_id": user_id}) if object_id else None
+
+    def create_assistant(self, payload: dict[str, Any]) -> dict[str, Any]:
+        now = utc_now()
+        result = self.assistants.insert_one({
+            **payload,
+            "is_default": False,
+            "created_at": now,
+            "updated_at": now,
+        })
+        return self.assistants.find_one({"_id": result.inserted_id})
+
+    def update_assistant(self, assistant_id: str, user_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
+        assistant = self.get_assistant(assistant_id, user_id)
+        if not assistant or assistant.get("is_default"):
+            return None
+        self.assistants.update_one({"_id": assistant["_id"]}, {"$set": {**fields, "updated_at": utc_now()}})
+        return self.get_assistant(assistant_id, user_id)
+
+    def delete_assistant(self, assistant_id: str, user_id: str) -> bool:
+        assistant = self.get_assistant(assistant_id, user_id)
+        if not assistant or assistant.get("is_default") or self.threads.count_documents({"user_id": user_id, "assistant_id": assistant["_id"]}):
+            return False
+        return bool(self.assistants.delete_one({"_id": assistant["_id"]}).deleted_count)
+
     def create_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
         now = utc_now()
         thread = {
@@ -134,8 +191,10 @@ class ChatRepository:
         self.threads.update_one({"_id": thread_id}, {"$set": {"root_message_id": root_result.inserted_id}})
         return self.threads.find_one({"_id": thread_id})
 
-    def list_conversations(self, user_id: str) -> list[dict[str, Any]]:
-        return list(self.threads.find({"user_id": user_id}).sort("last_message_at", DESCENDING))
+    def list_conversations(self, user_id: str, assistant_id: str | None = None) -> list[dict[str, Any]]:
+        default_assistant = self.ensure_default_assistant(user_id)
+        selected = as_object_id(assistant_id) if assistant_id else default_assistant["_id"]
+        return list(self.threads.find({"user_id": user_id, "assistant_id": selected}).sort("last_message_at", DESCENDING))
 
     def get_conversation(self, conversation_id: str, user_id: str) -> dict[str, Any] | None:
         object_id = as_object_id(conversation_id)
@@ -441,6 +500,7 @@ class ChatRepository:
                 "model": source_thread.get("model"),
                 "temperature": source_thread.get("temperature", 0.7),
                 "context_turns": source_thread.get("context_turns", 8),
+                "assistant_id": source_thread.get("assistant_id"),
                 "source_thread_id": source_thread["_id"],
                 "source_message_id": source_message["_id"],
             }
