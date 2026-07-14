@@ -14,11 +14,14 @@ class ChatRepository:
         self.db = db
         self.providers = db["provider_profiles"]
         self.preferences = db["chat_preferences"]
+        self.user_profiles = db["user_profiles"]
+        self.users = db["users"]
         self.conversations = db["conversations"]
         self.messages = db["messages"]
 
     def ensure_indexes(self) -> None:
         self.preferences.create_index("user_id", unique=True)
+        self.user_profiles.create_index("user_id", unique=True)
         self.conversations.create_index([("user_id", 1), ("last_message_at", -1)])
         self.messages.create_index([("conversation_id", 1), ("created_at", 1)])
 
@@ -62,6 +65,22 @@ class ChatRepository:
             upsert=True,
         )
         return self.get_preferences(user_id)
+
+    def get_user_profile(self, user_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        user = self.users.find_one({"email": user_id}) or self.users.find_one({"username": user_id})
+        return user, self.user_profiles.find_one({"user_id": user_id})
+
+    def save_user_avatar(self, user_id: str, avatar_data_url: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        now = utc_now()
+        self.user_profiles.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {"avatar_data_url": avatar_data_url, "updated_at": now},
+                "$setOnInsert": {"user_id": user_id, "created_at": now},
+            },
+            upsert=True,
+        )
+        return self.get_user_profile(user_id)
 
     def create_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
         now = utc_now()

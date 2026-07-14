@@ -9,6 +9,7 @@ from AgentBI.src.api.api import router
 from AgentBI.src.api.chat import router as chat_router
 from AgentBI.src.api.conversations import router as conversation_router
 from AgentBI.src.api.providers import router as provider_router
+from AgentBI.src.api.user_profile import router as user_profile_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.chat_repository import ChatRepository
 from pymongo import MongoClient
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(router)
 app.include_router(provider_router)
+app.include_router(user_profile_router)
 app.include_router(conversation_router)
 app.include_router(chat_router)
 

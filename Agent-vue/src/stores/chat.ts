@@ -74,6 +74,13 @@ export const useChatStore = defineStore('chat', () => {
   async function select(id: string, userId: string) {
     currentUserId = userId; activeId.value = id; saveActiveConversation(userId, id); messages.value = await api.listMessages(id, userId)
   }
+  async function rename(id: string, userId: string, title: string) {
+    const normalized = title.trim()
+    if (!normalized) return
+    const updated = await api.updateConversation(id, userId, { title: normalized })
+    const index = conversations.value.findIndex((item) => item.id === id)
+    if (index !== -1) conversations.value[index] = updated
+  }
   async function send(userId: string, content: string) {
     if (!content.trim() || generating.value) return
     currentUserId = userId
@@ -95,5 +102,5 @@ export const useChatStore = defineStore('chat', () => {
   }
   function stop() { controller?.abort() }
   async function remove(id: string, userId: string) { await api.deleteConversation(id, userId); conversations.value = conversations.value.filter((item) => item.id !== id); if (activeId.value === id) { activeId.value = ''; messages.value = []; clearActiveConversation(userId); if (conversations.value[0]) await select(conversations.value[0].id, userId) } }
-  return { conversations, messages, activeId, loading, generating, error, preferences, activeConversation, load, restorePreferences, persistPreferences, create, select, send, stop, remove }
+  return { conversations, messages, activeId, loading, generating, error, preferences, activeConversation, load, restorePreferences, persistPreferences, create, select, rename, send, stop, remove }
 })
