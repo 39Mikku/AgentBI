@@ -2,15 +2,18 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
+import type { UserProfile } from '@/api/user-profile'
 
 const STORAGE_KEY = 'agentbi_auth'
 const USER_STORAGE_KEY = 'agentbi_user'
+const PROFILE_STORAGE_KEY = 'agentbi_user_profile'
 
 type Step = 1 | 2
 
 export const useAuthStore = defineStore('auth', () => {
   // ---- state ----
   const email = ref(typeof localStorage !== 'undefined' ? localStorage.getItem(USER_STORAGE_KEY) || '' : '')
+  const profile = ref<UserProfile | null>(readStoredProfile(email.value))
   const code = ref('')
   const step = ref<Step>(1)
   const sending = ref(false)
@@ -25,6 +28,19 @@ export const useAuthStore = defineStore('auth', () => {
   )
 
   let timer: ReturnType<typeof setInterval> | null = null
+
+  function readStoredProfile(userId: string): UserProfile | null {
+    if (typeof localStorage === 'undefined') return null
+    try {
+      const stored = JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) || 'null') as UserProfile | null
+      return stored?.user_id === userId ? stored : null
+    } catch { return null }
+  }
+
+  function setProfile(value: UserProfile) {
+    profile.value = value
+    if (typeof localStorage !== 'undefined') localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(value))
+  }
 
   // ---- getters ----
   const canSendCode = computed(
@@ -91,7 +107,9 @@ export const useAuthStore = defineStore('auth', () => {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, '1')
         localStorage.setItem(USER_STORAGE_KEY, email.value.trim())
+        localStorage.removeItem(PROFILE_STORAGE_KEY)
       }
+      profile.value = null
       notifySuccess(resp.msg || '登录成功')
     } catch (e) {
       notifyError(e instanceof ApiError ? e.message : '登录失败')
@@ -111,12 +129,14 @@ export const useAuthStore = defineStore('auth', () => {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(STORAGE_KEY)
       localStorage.removeItem(USER_STORAGE_KEY)
+      localStorage.removeItem(PROFILE_STORAGE_KEY)
     }
     resetForm()
   }
 
   function resetForm() {
     email.value = ''
+    profile.value = null
     code.value = ''
     step.value = 1
     countdown.value = 0
@@ -129,6 +149,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     email,
+    profile,
     code,
     step,
     sending,
@@ -141,6 +162,7 @@ export const useAuthStore = defineStore('auth', () => {
     canLogin,
     handleSendCode,
     handleLogin,
+    setProfile,
     backToEmail,
     logout,
     resetForm,

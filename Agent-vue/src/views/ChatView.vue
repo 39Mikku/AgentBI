@@ -2,10 +2,11 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ModelAvatar from '@/components/ModelAvatar.vue'
-import { getUserProfile, saveUserAvatar, type UserProfile } from '@/api/user-profile'
+import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { renderMarkdown } from '@/utils/markdown'
+import { createRuntimeContext } from '@/utils/runtime-context'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -15,7 +16,7 @@ const menuOpen = ref(false)
 const profileOpen = ref(false)
 const profileBusy = ref(false)
 const profileError = ref('')
-const profile = ref<UserProfile | null>(null)
+const profile = computed(() => auth.profile)
 const editingId = ref('')
 const editingTitle = ref('')
 const timeline = ref<HTMLElement | null>(null)
@@ -24,7 +25,7 @@ const modelLabel = computed(() => chat.preferences.model || '选择模型')
 const userName = computed(() => profile.value?.username || (userId.value.includes('@') ? userId.value.split('@')[0] || userId.value : userId.value))
 const userInitials = computed(() => userName.value.slice(0, 2).toUpperCase())
 
-function send() { const value = input.value.trim(); if (value) { input.value = ''; void chat.send(userId.value, value) } }
+function send() { const value = input.value.trim(); if (value) { input.value = ''; void chat.send(userId.value, value, createRuntimeContext(userName.value, navigator.language, Intl.DateTimeFormat().resolvedOptions().timeZone)) } }
 function keydown(event: KeyboardEvent) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() } }
 async function newChat() { await chat.create(userId.value); menuOpen.value = false }
 function logout() { auth.logout(); void router.push('/') }
@@ -36,7 +37,8 @@ async function commitRename(id: string) {
   cancelRename()
 }
 async function loadProfile() {
-  try { profile.value = await getUserProfile(userId.value) } catch (error) { profileError.value = error instanceof Error ? error.message : '无法读取用户资料' }
+  if (profile.value?.user_id === userId.value) return
+  try { auth.setProfile(await getUserProfile(userId.value)) } catch (error) { profileError.value = error instanceof Error ? error.message : '无法读取用户资料' }
 }
 async function uploadAvatar(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
@@ -51,7 +53,7 @@ async function uploadAvatar(event: Event) {
       reader.onerror = () => reject(new Error('读取图片失败'))
       reader.readAsDataURL(file)
     })
-    profile.value = await saveUserAvatar(userId.value, dataUrl)
+    auth.setProfile(await saveUserAvatar(userId.value, dataUrl))
   } catch (error) { profileError.value = error instanceof Error ? error.message : '头像保存失败' } finally { profileBusy.value = false }
 }
 
@@ -94,7 +96,7 @@ onMounted(async () => { await Promise.all([chat.load(userId.value), loadProfile(
       <header class="dialogue-head">
         <button class="mobile-menu" @click="menuOpen = !menuOpen">☰</button>
         <div class="head-context"><span class="head-eyebrow">ACTIVE THREAD</span><strong>{{ chat.activeConversation?.title || '新的对话' }}</strong></div>
-        <button class="model-chip" @click="router.push('/settings/models')"><ModelAvatar :model="modelLabel" size="small" /><span class="live-dot"></span>{{ modelLabel }} <i>↗</i></button>
+        <button class="model-chip" @click="router.push('/settings/models')"><ModelAvatar :model="modelLabel" size="small" variant="bare" /><span class="live-dot"></span>{{ modelLabel }} <i>↗</i></button>
       </header>
 
       <section ref="timeline" class="timeline">

@@ -1,7 +1,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import * as api from '@/api/chat'
-import type { ChatMessage, ChatPreferences, ChatTimelineEvent, Conversation } from '@/api/chat-types'
+import type { ChatMessage, ChatPreferences, ChatRuntimeContext, ChatTimelineEvent, Conversation } from '@/api/chat-types'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -81,7 +81,7 @@ export const useChatStore = defineStore('chat', () => {
     const index = conversations.value.findIndex((item) => item.id === id)
     if (index !== -1) conversations.value[index] = updated
   }
-  async function send(userId: string, content: string) {
+  async function send(userId: string, content: string, runtime: ChatRuntimeContext) {
     if (!content.trim() || generating.value) return
     currentUserId = userId
     if (!activeId.value) await create(userId)
@@ -89,7 +89,7 @@ export const useChatStore = defineStore('chat', () => {
     messages.value.push({ id: `user-${Date.now()}`, conversation_id: activeId.value, user_id: userId, role: 'user', content, tool_events: [], status: 'complete' }, temporary)
     generating.value = true; error.value = ''; controller = new AbortController()
     try {
-      await api.streamChat({ user_id: userId, conversation_id: activeId.value, content, ...preferences.value }, (event) => {
+      await api.streamChat({ user_id: userId, conversation_id: activeId.value, content, ...preferences.value, ...runtime }, (event) => {
         if (event.event === 'delta') { temporary.content += event.data.content || ''; appendTimeline(temporary, { type: 'delta', content: event.data.content || '' }) }
         if (event.event === 'reasoning_summary') { temporary.reasoning_summary = `${temporary.reasoning_summary || ''}${event.data.content || ''}`; appendTimeline(temporary, { type: 'reasoning_summary', content: event.data.content || '' }) }
         if (event.event === 'tool_started' || event.event === 'tool_finished') { temporary.tool_events.push(event.data); appendTimeline(temporary, { type: event.event, tool: event.data.tool || '工具', content: event.data.content }) }

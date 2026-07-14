@@ -1,4 +1,6 @@
 from collections.abc import AsyncIterator
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -11,6 +13,21 @@ from AgentBI.src.services.chat_service import ChatService, append_timeline_event
 
 router = APIRouter(tags=["chat"])
 logger = Logger.get_logger(__name__)
+
+
+def build_runtime_context(payload: ChatStreamRequest) -> dict[str, str]:
+    timezone = payload.timezone or "Asia/Shanghai"
+    try:
+        now = datetime.now(ZoneInfo(timezone))
+    except ZoneInfoNotFoundError:
+        timezone = "Asia/Shanghai"
+        now = datetime.now(ZoneInfo(timezone))
+    return {
+        "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": timezone,
+        "locale": payload.locale or "zh-CN",
+        "user_name": payload.user_name or payload.user_id,
+    }
 
 
 @router.post("/chat/stream")
@@ -46,6 +63,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
     if not conversation.get("title") or conversation["title"] == "未命名会话":
         repository.update_conversation(payload.conversation_id, payload.user_id, {"title": payload.content[:36]})
     context = ChatService(repository).build_context(payload.conversation_id, payload.user_id, context_turns)
+    runtime_context = build_runtime_context(payload)
 
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -54,7 +72,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
         timeline: list[dict] = []
         yield encode_sse_event("message_start", {"conversation_id": payload.conversation_id})
         try:
-            async for event in ChatAgent().stream(context, provider, model, temperature):
+            async for event in ChatAgent().stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
                     answer.append(event["content"])

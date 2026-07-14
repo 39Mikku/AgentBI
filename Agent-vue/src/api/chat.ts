@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatPreferences, ChatStreamEvent, Conversation } from './chat-types'
+import type { ChatMessage, ChatPreferences, ChatRuntimeContext, ChatStreamEvent, Conversation } from './chat-types'
 
 const BASE = '/api'
 
@@ -48,13 +48,13 @@ export const savePreferences = (userId: string, preferences: ChatPreferences) =>
   })
 
 export async function streamChat(
-  payload: { user_id: string; conversation_id: string; content: string } & Partial<ChatPreferences>,
+  payload: { user_id: string; conversation_id: string; content: string } & Partial<ChatPreferences> & ChatRuntimeContext,
   onEvent: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
 ) {
   const response = await fetch(`${BASE}/chat/stream`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      ...payload, provider_id: payload.providerId, context_turns: payload.contextTurns,
+      ...payload, provider_id: payload.providerId, context_turns: payload.contextTurns, user_name: payload.userName,
     }), signal,
   })
   if (!response.ok || !response.body) throw new Error((await response.json().catch(() => null))?.detail || '无法开始生成')

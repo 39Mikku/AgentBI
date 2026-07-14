@@ -106,3 +106,6 @@ class ChatStreamRequest(BaseModel):
     model: str | None = Field(default=None, max_length=200)
     temperature: float | None = Field(default=None, ge=0, le=2)
     context_turns: int | None = Field(default=None, ge=1, le=50)
+    user_name: str | None = Field(default=None, max_length=120)
+    locale: str | None = Field(default=None, max_length=32)
+    timezone: str | None = Field(default=None, max_length=64)

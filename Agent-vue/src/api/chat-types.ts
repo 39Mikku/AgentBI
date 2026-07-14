@@ -45,6 +45,12 @@ export interface ChatPreferences {
   contextTurns: number
 }
 
+export interface ChatRuntimeContext {
+  userName: string
+  locale: string
+  timezone: string
+}
+
 export interface ChatStreamEvent {
   event: string
   data: Record<string, string>
