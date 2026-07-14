@@ -13,6 +13,7 @@ class ChatRouteTests(unittest.TestCase):
 
         self.assertIn("/chat/stream", chat_paths)
         self.assertIn("/conversations", conversation_paths)
+        self.assertIn("/chat/preferences", conversation_paths)
         self.assertIn("/providers", provider_paths)
 
 

@@ -17,6 +17,36 @@ export const deleteConversation = (id: string, userId: string) =>
   fetch(`${BASE}/conversations/${id}?user_id=${encodeURIComponent(userId)}`, { method: 'DELETE' })
 export const listMessages = (id: string, userId: string) => json<ChatMessage[]>(`/conversations/${id}/messages?user_id=${encodeURIComponent(userId)}`)
 
+type StoredPreferences = {
+  user_id: string
+  provider_id?: string | null
+  model?: string | null
+  temperature: number
+  context_turns: number
+}
+
+export async function getPreferences(userId: string): Promise<ChatPreferences> {
+  const preferences = await json<StoredPreferences>(`/chat/preferences?user_id=${encodeURIComponent(userId)}`)
+  return {
+    providerId: preferences.provider_id || undefined,
+    model: preferences.model || undefined,
+    temperature: preferences.temperature,
+    contextTurns: preferences.context_turns,
+  }
+}
+
+export const savePreferences = (userId: string, preferences: ChatPreferences) =>
+  json<StoredPreferences>(`/chat/preferences?user_id=${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider_id: preferences.providerId || null,
+      model: preferences.model || null,
+      temperature: preferences.temperature,
+      context_turns: preferences.contextTurns,
+    }),
+  })
+
 export async function streamChat(
   payload: { user_id: string; conversation_id: string; content: string } & Partial<ChatPreferences>,
   onEvent: (event: ChatStreamEvent) => void,

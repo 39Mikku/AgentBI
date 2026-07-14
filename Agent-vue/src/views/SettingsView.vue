@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import * as providers from '@/api/providers'
 import type { ProviderProfile } from '@/api/chat-types'
 import { useChatStore } from '@/stores/chat'
 
 const router = useRouter()
+const auth = useAuthStore()
 const chat = useChatStore()
 const profiles = ref<ProviderProfile[]>([])
 const busy = ref('')
@@ -16,7 +18,7 @@ async function load() { try { profiles.value = await providers.listProviders() }
 async function add() { if (!form.value.name || !form.value.base_url || !form.value.api_key) return; busy.value = 'add'; try { const profile = await providers.createProvider(form.value); form.value = { name: '', base_url: '', api_key: '', default_model: '' }; chat.preferences.providerId = profile.id; chat.preferences.model = profile.default_model || undefined; await load() } catch (e) { error.value = e instanceof Error ? e.message : '保存失败' } finally { busy.value = '' } }
 async function refresh(id: string) { busy.value = id; try { const profile = await providers.refreshModels(id); if (chat.preferences.providerId === id && !chat.preferences.model) chat.preferences.model = profile.available_models[0]; await load() } catch (e) { error.value = e instanceof Error ? e.message : '刷新失败' } finally { busy.value = '' } }
 async function remove(id: string) { await providers.deleteProvider(id); if (chat.preferences.providerId === id) { chat.preferences.providerId = undefined; chat.preferences.model = undefined }; await load() }
-onMounted(load)
+onMounted(async () => { await chat.restorePreferences(auth.email || 'local-user'); await load() })
 </script>
 
 <template>

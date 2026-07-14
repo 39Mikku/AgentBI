@@ -27,8 +27,15 @@ export interface ChatMessage {
   content: string
   reasoning_summary?: string | null
   tool_events: Array<Record<string, unknown>>
+  timeline?: ChatTimelineEvent[]
   status: 'complete' | 'streaming' | 'error'
   created_at?: string
+}
+
+export interface ChatTimelineEvent {
+  type: 'delta' | 'reasoning_summary' | 'tool_started' | 'tool_finished'
+  content?: string
+  tool?: string
 }
 
 export interface ChatPreferences {

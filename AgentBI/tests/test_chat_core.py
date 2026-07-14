@@ -41,7 +41,24 @@ class ChatCoreTests(unittest.TestCase):
 
         self.assertEqual(
             encode_sse_event("delta", {"content": "Hello"}),
-            'event: delta\\ndata: {"content":"Hello"}\\n\\n',
+            'event: delta\ndata: {"content":"Hello"}\n\n',
+        )
+
+    def test_timeline_keeps_content_and_tool_events_in_emission_order(self):
+        from AgentBI.src.services.chat_service import append_timeline_event
+
+        timeline = []
+        append_timeline_event(timeline, "delta", {"content": "先说明。"})
+        append_timeline_event(timeline, "tool_started", {"tool": "mongo_query"})
+        append_timeline_event(timeline, "delta", {"content": "再汇报。"})
+
+        self.assertEqual(
+            timeline,
+            [
+                {"type": "delta", "content": "先说明。"},
+                {"type": "tool_started", "tool": "mongo_query"},
+                {"type": "delta", "content": "再汇报。"},
+            ],
         )
 
 

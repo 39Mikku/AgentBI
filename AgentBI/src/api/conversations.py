@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from AgentBI.src.api.dependencies import get_chat_repository
 from AgentBI.src.schemas.chat_schema import (
+    ChatPreferencesResponse,
+    ChatPreferencesUpdate,
     ChatMessageResponse,
     ConversationCreate,
     ConversationResponse,
@@ -9,6 +11,18 @@ from AgentBI.src.schemas.chat_schema import (
 )
 
 router = APIRouter(tags=["conversations"])
+
+
+@router.get("/chat/preferences", response_model=ChatPreferencesResponse)
+def get_preferences(request: Request, user_id: str = Query(min_length=1)):
+    return ChatPreferencesResponse.from_document(get_chat_repository(request).get_preferences(user_id))
+
+
+@router.put("/chat/preferences", response_model=ChatPreferencesResponse)
+def save_preferences(request: Request, payload: ChatPreferencesUpdate, user_id: str = Query(min_length=1)):
+    return ChatPreferencesResponse.from_document(
+        get_chat_repository(request).save_preferences(user_id, payload.model_dump())
+    )
 
 
 @router.get("/conversations", response_model=list[ConversationResponse])
