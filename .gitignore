@@ -1,0 +1,82 @@
+# ============================================================
+# AgentBI Monorepo .gitignore
+# 覆盖 Python 后端 + Node 前端 + IDE + OS 全场景
+# ============================================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+
+# 虚拟环境（可再生，不入库）
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python 类型检查/测试缓存
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ---------- Node / 前端 ----------
+node_modules/
+dist-ssr/
+*.local
+.eslintcache
+.oxlintcache
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vite 临时文件
+*.timestamp-*-*.mjs
+
+# ---------- 环境变量与密钥 ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------- 日志 ----------
+logs/
+*.log
+
+# ---------- IDE ----------
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------- 备份压缩包 ----------
+*_backup_*.zip
+*.bak
+*.tmp
