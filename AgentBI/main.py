@@ -1,34 +1,50 @@
-from fastapi import FastAPI
-import uvicorn
+import os
 from contextlib import asynccontextmanager
-from fastapi.middleware.cors import CORSMiddleware
-from AgentBI.src.logging.logging import Logger
+
+import uvicorn
+from fastapi import FastAPI
+
 from AgentBI.src.agents.login_agent import LoginAgent
 from AgentBI.src.api.api import router
+from AgentBI.src.api.chat import router as chat_router
+from AgentBI.src.api.conversations import router as conversation_router
+from AgentBI.src.api.providers import router as provider_router
+from AgentBI.src.logging.logging import Logger
+from AgentBI.src.repositories.chat_repository import ChatRepository
+from pymongo import MongoClient
 
-# 创建日志记录
 logger = Logger.get_logger(__name__)
 
-# 定义生命周期/创建和销毁
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 在 FastAPI中注册 智能体
     app.state.login_agent = LoginAgent()
-    logger.info("创建邮件发送智能体的生命周期。。。")
+    mongo_uri = os.getenv("MONGO_URI")
+    if mongo_uri:
+        client = MongoClient(mongo_uri)
+        app.state.mongo_client = client
+        app.state.chat_repository = ChatRepository(client[os.getenv("MONGO_DATABASE", "chat_bi")])
+        app.state.chat_repository.ensure_indexes()
+    else:
+        app.state.chat_repository = None
+    logger.info("创建 AgentBI 服务生命周期")
     yield
-    logger.info("销毁邮件发送智能体的生命周期。。。")
+    if getattr(app.state, "mongo_client", None):
+        app.state.mongo_client.close()
+    logger.info("销毁 AgentBI 服务生命周期")
 
-# 创建 FastAPI 应用
-app = FastAPI(lifespan = lifespan)
 
-# 注册api.py中路由
+app = FastAPI(lifespan=lifespan)
 app.include_router(router)
+app.include_router(provider_router)
+app.include_router(conversation_router)
+app.include_router(chat_router)
 
-# 增加一个友好的根路径欢迎页面
+
 @app.get("/")
 def read_root():
-    return {"status": "success", "message": "AgentBI 智能体后端服务已启动！请访问 http://127.0.0.1:8000/docs 进行接口测试。"}
+    return {"status": "success", "message": "AgentBI 服务已启动，请访问 /docs。"}
+
 
 if __name__ == "__main__":
-    # 使用 uvicorn 启动服务端应用
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

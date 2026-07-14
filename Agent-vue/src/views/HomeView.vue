@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
@@ -27,8 +27,12 @@ function onEnter() {
 
 onMounted(() => {
   if (auth.isAuthenticated) {
-    router.replace('/console')
+    router.replace('/chat')
   }
+})
+
+watch(() => auth.isAuthenticated, (authenticated) => {
+  if (authenticated) router.replace('/chat')
 })
 </script>
 

@@ -4,12 +4,13 @@ import * as api from '@/api'
 import { ApiError } from '@/api'
 
 const STORAGE_KEY = 'agentbi_auth'
+const USER_STORAGE_KEY = 'agentbi_user'
 
 type Step = 1 | 2
 
 export const useAuthStore = defineStore('auth', () => {
   // ---- state ----
-  const email = ref('')
+  const email = ref(typeof localStorage !== 'undefined' ? localStorage.getItem(USER_STORAGE_KEY) || '' : '')
   const code = ref('')
   const step = ref<Step>(1)
   const sending = ref(false)
@@ -89,6 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
       isAuthenticated.value = true
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, '1')
+        localStorage.setItem(USER_STORAGE_KEY, email.value.trim())
       }
       notifySuccess(resp.msg || '登录成功')
     } catch (e) {
@@ -108,6 +110,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated.value = false
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(USER_STORAGE_KEY)
     }
     resetForm()
   }
