@@ -110,6 +110,9 @@ export const useChatStore = defineStore('chat', () => {
 
   function createOptimisticEditedMessage(userId: string, messageId: string, content: string) {
     const original = messages.value.find((message) => message.id === messageId)
+    const temporaryId = `temp-user-${Date.now()}`
+    const versionIds = original?.version_ids?.length ? original.version_ids : original ? [original.id] : []
+    const siblingCount = original?.sibling_count || 1
     return reactive<ChatMessage>({
       ...(original || {
         conversation_id: activeId.value,
@@ -117,7 +120,7 @@ export const useChatStore = defineStore('chat', () => {
         role: 'user' as const,
         parent_id: null,
       }),
-      id: `temp-user-${Date.now()}`,
+      id: temporaryId,
       conversation_id: activeId.value,
       user_id: userId,
       role: 'user',
@@ -126,6 +129,9 @@ export const useChatStore = defineStore('chat', () => {
       tool_events: [],
       timeline: [],
       status: 'complete',
+      sibling_count: siblingCount + 1,
+      sibling_index: siblingCount,
+      version_ids: [...versionIds, temporaryId],
     })
   }
 
@@ -135,18 +141,45 @@ export const useChatStore = defineStore('chat', () => {
     return temporary
   }
 
+  function replaceMessageId(message: ChatMessage, messageId: string) {
+    const previousId = message.id
+    message.id = messageId
+    if (message.version_ids?.length) message.version_ids = message.version_ids.map((id) => id === previousId ? messageId : id)
+  }
+
+  function updateConversationFromStream(event: { data: Record<string, string> }) {
+    const conversationId = event.data.conversation_id || activeId.value
+    const index = conversations.value.findIndex((conversation) => conversation.id === conversationId)
+    const current = conversations.value[index]
+    if (index === -1 || !current) return
+    conversations.value[index] = {
+      ...current,
+      title: event.data.conversation_title || current.title,
+      updated_at: event.data.conversation_updated_at || current.updated_at,
+      last_message_at: event.data.conversation_last_message_at || current.last_message_at,
+      active_message_id: event.data.conversation_active_message_id || current.active_message_id,
+    }
+  }
+
   function consumeStreamEvent(temporary: ChatMessage, event: { event: string; data: Record<string, string> }) {
-    if (event.event === 'message_start' && event.data.message_id) temporary.id = event.data.message_id
+    if (event.event === 'message_start' && event.data.message_id) {
+      replaceMessageId(temporary, event.data.message_id)
+      temporary.parent_id = event.data.parent_message_id || temporary.parent_id
+      if (event.data.created_at) temporary.created_at = event.data.created_at
+      updateConversationFromStream(event)
+
+      const temporaryIndex = messages.value.findIndex((message) => message === temporary)
+      const parent = temporaryIndex > 0 ? messages.value[temporaryIndex - 1] : undefined
+      if (parent?.role === 'user' && event.data.parent_message_id && (parent.id.startsWith('user-') || parent.id.startsWith('temp-user-'))) {
+        replaceMessageId(parent, event.data.parent_message_id)
+        if (event.data.created_at) parent.created_at = event.data.created_at
+      }
+    }
     if (event.event === 'delta') { temporary.content += event.data.content || ''; appendTimeline(temporary, { type: 'delta', content: event.data.content || '' }) }
     if (event.event === 'reasoning_summary') { temporary.reasoning_summary = `${temporary.reasoning_summary || ''}${event.data.content || ''}`; appendTimeline(temporary, { type: 'reasoning_summary', content: event.data.content || '' }) }
     if (event.event === 'tool_started' || event.event === 'tool_finished') { temporary.tool_events.push(event.data); appendTimeline(temporary, { type: event.event, tool: event.data.tool || '工具', content: event.data.content }) }
     if (event.event === 'error') { temporary.status = 'error'; error.value = event.data.message || '生成失败' }
     if (event.event === 'done') temporary.status = 'complete'
-  }
-
-  async function refreshActiveConversation(userId: string) {
-    conversations.value = await api.listConversations(userId)
-    if (activeId.value) await select(activeId.value, userId)
   }
 
   async function runGeneration(
@@ -158,7 +191,6 @@ export const useChatStore = defineStore('chat', () => {
     generating.value = true; error.value = ''; controller = new AbortController()
     try {
       await start((event) => consumeStreamEvent(temporary, event), controller.signal)
-      await refreshActiveConversation(userId)
     } catch (err) {
       if ((err as Error).name !== 'AbortError') error.value = err instanceof Error ? err.message : '生成失败'
       temporary.status = 'error'
@@ -182,7 +214,15 @@ export const useChatStore = defineStore('chat', () => {
       userId,
       (onEvent, signal) => api.streamRetry({ user_id: userId, conversation_id: activeId.value, message_id: messageId, ...preferences.value, ...runtime }, onEvent, signal),
       () => {
+        const original = messages.value.find((message) => message.id === messageId)
         const temporary = createStreamingMessage(userId)
+        if (original) {
+          const versionIds = original.version_ids?.length ? original.version_ids : [original.id]
+          const siblingCount = original.sibling_count || 1
+          temporary.sibling_count = siblingCount + 1
+          temporary.sibling_index = siblingCount
+          temporary.version_ids = [...versionIds, temporary.id]
+        }
         messages.value = replaceTimelineBranch(messages.value, messageId, [temporary])
         return temporary
       },

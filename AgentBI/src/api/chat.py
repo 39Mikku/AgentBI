@@ -45,7 +45,7 @@ def resolve_generation(repository: Any, payload: Any) -> tuple[dict[str, Any], d
     if not model:
         raise HTTPException(status_code=400, detail="请先选择模型")
     temperature = payload.temperature if payload.temperature is not None else thread.get("temperature", 0.7)
-    context_turns = payload.context_turns or thread.get("context_turns", 8)
+    context_turns = payload.context_turns if payload.context_turns is not None else thread.get("context_turns", 8)
     thread = repository.update_conversation(
         payload.conversation_id,
         payload.user_id,
@@ -71,6 +71,27 @@ def model_snapshot(thread: dict[str, Any], provider: dict[str, Any], model: str,
     }
 
 
+def build_message_start_payload(
+    conversation_id: str,
+    assistant_message: dict[str, Any],
+    conversation_title: str,
+) -> dict[str, str]:
+    """Provide enough persisted metadata for the client to finalize optimistic nodes."""
+    created_at = assistant_message.get("created_at")
+    timestamp = created_at.isoformat() if isinstance(created_at, datetime) else ""
+    message_id = str(assistant_message["_id"])
+    return {
+        "conversation_id": conversation_id,
+        "message_id": message_id,
+        "parent_message_id": str(assistant_message["parent_id"]),
+        "created_at": timestamp,
+        "conversation_title": conversation_title,
+        "conversation_updated_at": timestamp,
+        "conversation_last_message_at": timestamp,
+        "conversation_active_message_id": message_id,
+    }
+
+
 def stream_assistant(
     repository: Any,
     conversation_id: str,
@@ -80,6 +101,7 @@ def stream_assistant(
     model: str,
     temperature: float,
     runtime_context: dict[str, str],
+    conversation_title: str,
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -88,7 +110,7 @@ def stream_assistant(
         timeline: list[dict[str, Any]] = []
         yield encode_sse_event(
             "message_start",
-            {"conversation_id": conversation_id, "message_id": str(assistant_message["_id"])},
+            build_message_start_payload(conversation_id, assistant_message, conversation_title),
         )
         try:
             async for event in ChatAgent().stream(context, provider, model, temperature, runtime_context):
@@ -133,7 +155,11 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
     if not user_message:
         raise HTTPException(status_code=404, detail="无法创建用户消息")
     if not thread.get("title") or thread["title"] == "未命名会话":
-        repository.update_conversation(payload.conversation_id, payload.user_id, {"title": payload.content[:36]})
+        thread = repository.update_conversation(
+            payload.conversation_id,
+            payload.user_id,
+            {"title": payload.content[:36]},
+        ) or thread
     context = ChatService(repository).build_context(payload.conversation_id, payload.user_id, context_turns)
     assistant_message = repository.create_assistant_message(
         payload.conversation_id,
@@ -153,6 +179,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             model,
             temperature,
             build_runtime_context(payload),
+            thread.get("title", ""),
         ),
         media_type="text/event-stream",
     )
@@ -190,6 +217,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             model,
             temperature,
             build_runtime_context(payload),
+            thread.get("title", ""),
         ),
         media_type="text/event-stream",
     )
@@ -221,6 +249,7 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             model,
             temperature,
             build_runtime_context(payload),
+            thread.get("title", ""),
         ),
         media_type="text/event-stream",
     )

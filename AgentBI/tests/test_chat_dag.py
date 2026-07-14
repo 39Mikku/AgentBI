@@ -1,7 +1,24 @@
 import unittest
+from datetime import datetime, timezone
 
 
 class ActivePathContextTests(unittest.TestCase):
+    def test_stream_start_payload_contains_data_needed_to_finalize_the_optimistic_timeline(self):
+        from AgentBI.src.api.chat import build_message_start_payload
+
+        created_at = datetime(2026, 7, 14, 14, 30, tzinfo=timezone.utc)
+        payload = build_message_start_payload(
+            "thread-1",
+            {"_id": "assistant-1", "parent_id": "user-1", "created_at": created_at},
+            "First question",
+        )
+
+        self.assertEqual(payload["message_id"], "assistant-1")
+        self.assertEqual(payload["parent_message_id"], "user-1")
+        self.assertEqual(payload["conversation_title"], "First question")
+        self.assertEqual(payload["conversation_active_message_id"], "assistant-1")
+        self.assertEqual(payload["created_at"], "2026-07-14T14:30:00+00:00")
+
     def test_active_path_context_excludes_root_and_keeps_only_selected_branch(self):
         from AgentBI.src.services.chat_service import build_active_path_context_messages
 

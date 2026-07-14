@@ -6,10 +6,10 @@ from AgentBI.src.repositories.chat_repository import ChatRepository
 
 
 def build_context_messages(messages: list[dict[str, Any]], context_turns: int) -> list[dict[str, str]]:
-    limit = max(1, context_turns) * 2
+    selected_messages = messages if context_turns <= 0 else messages[-max(1, context_turns) * 2 :]
     return [
         {"role": item["role"], "content": item["content"]}
-        for item in messages[-limit:]
+        for item in selected_messages
         if item.get("role") in {"user", "assistant"} and isinstance(item.get("content"), str)
     ]
 

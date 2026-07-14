@@ -36,6 +36,17 @@ class ChatCoreTests(unittest.TestCase):
             ],
         )
 
+    def test_zero_context_turns_keeps_the_full_message_history(self):
+        from AgentBI.src.services.chat_service import build_context_messages
+
+        messages = [
+            {"role": "user", "content": "one"},
+            {"role": "assistant", "content": "one answer"},
+            {"role": "user", "content": "two"},
+        ]
+
+        self.assertEqual(build_context_messages(messages, context_turns=0), messages)
+
     def test_sse_event_encoder_has_an_event_name_and_json_payload(self):
         from AgentBI.src.services.chat_service import encode_sse_event
 

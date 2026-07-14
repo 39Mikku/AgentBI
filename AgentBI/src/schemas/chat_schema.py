@@ -10,7 +10,7 @@ class ConversationCreate(BaseModel):
     provider_id: str | None = None
     model: str | None = Field(default=None, max_length=200)
     temperature: float = Field(default=0.7, ge=0, le=2)
-    context_turns: int = Field(default=8, ge=1, le=50)
+    context_turns: int = Field(default=8, ge=0, le=128)
 
 
 class ConversationUpdate(BaseModel):
@@ -18,14 +18,14 @@ class ConversationUpdate(BaseModel):
     provider_id: str | None = None
     model: str | None = Field(default=None, max_length=200)
     temperature: float | None = Field(default=None, ge=0, le=2)
-    context_turns: int | None = Field(default=None, ge=1, le=50)
+    context_turns: int | None = Field(default=None, ge=0, le=128)
 
 
 class ChatPreferencesUpdate(BaseModel):
     provider_id: str | None = None
     model: str | None = Field(default=None, max_length=200)
     temperature: float = Field(default=0.7, ge=0, le=2)
-    context_turns: int = Field(default=8, ge=1, le=50)
+    context_turns: int = Field(default=8, ge=0, le=128)
 
 
 class ChatPreferencesResponse(ChatPreferencesUpdate):
@@ -136,7 +136,7 @@ class ChatStreamRequest(BaseModel):
     provider_id: str | None = None
     model: str | None = Field(default=None, max_length=200)
     temperature: float | None = Field(default=None, ge=0, le=2)
-    context_turns: int | None = Field(default=None, ge=1, le=50)
+    context_turns: int | None = Field(default=None, ge=0, le=128)
     user_name: str | None = Field(default=None, max_length=120)
     locale: str | None = Field(default=None, max_length=32)
     timezone: str | None = Field(default=None, max_length=64)
@@ -149,7 +149,7 @@ class ChatRetryStreamRequest(BaseModel):
     provider_id: str | None = None
     model: str | None = Field(default=None, max_length=200)
     temperature: float | None = Field(default=None, ge=0, le=2)
-    context_turns: int | None = Field(default=None, ge=1, le=50)
+    context_turns: int | None = Field(default=None, ge=0, le=128)
     user_name: str | None = Field(default=None, max_length=120)
     locale: str | None = Field(default=None, max_length=32)
     timezone: str | None = Field(default=None, max_length=64)
