@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { renderMarkdown } from '@/utils/markdown'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -57,13 +58,13 @@ onMounted(() => chat.load(userId.value))
               <template v-for="(event, index) in message.timeline" :key="index">
                 <details v-if="event.type === 'reasoning_summary'" class="reasoning"><summary>推理摘要</summary><p>{{ event.content }}</p></details>
                 <div v-else-if="event.type === 'tool_started' || event.type === 'tool_finished'" class="tool-event">{{ event.tool || '工具' }} · {{ event.content || (event.type === 'tool_started' ? '执行中' : '已完成') }}</div>
-                <p v-else class="message-content">{{ event.content }}<b v-if="message.status === 'streaming' && index === message.timeline.length - 1" class="cursor"></b></p>
+                <div v-else class="message-content markdown" v-html="renderMarkdown(event.content || '')"></div><b v-if="message.status === 'streaming' && index === message.timeline.length - 1" class="cursor"></b>
               </template>
             </template>
             <template v-else>
               <details v-if="message.reasoning_summary" class="reasoning"><summary>推理摘要</summary><p>{{ message.reasoning_summary }}</p></details>
               <div v-for="(event, index) in message.tool_events" :key="index" class="tool-event">{{ event.tool || '工具' }} · {{ event.content || '执行中' }}</div>
-              <p class="message-content">{{ message.content }}<b v-if="message.status === 'streaming'" class="cursor"></b></p>
+              <div class="message-content markdown" v-html="renderMarkdown(message.content)"></div><b v-if="message.status === 'streaming'" class="cursor"></b>
             </template>
           </div>
         </article>
@@ -87,4 +88,5 @@ onMounted(() => chat.load(userId.value))
 .conversation-list{min-height:0}
 .dialogue{height:100dvh;min-height:0;overflow:hidden;grid-template-rows:82px minmax(0,1fr) auto}
 .timeline{min-height:0}
+.markdown :deep(p){margin:0 0 12px}.markdown :deep(p:last-child){margin-bottom:0}.markdown :deep(h1),.markdown :deep(h2),.markdown :deep(h3),.markdown :deep(h4){margin:22px 0 10px;line-height:1.2;letter-spacing:-.03em}.markdown :deep(h1){font-size:1.55em}.markdown :deep(h2){font-size:1.3em}.markdown :deep(h3){font-size:1.12em}.markdown :deep(ul),.markdown :deep(ol){margin:8px 0 13px;padding-left:24px}.markdown :deep(li+li){margin-top:4px}.markdown :deep(blockquote){margin:12px 0;padding:7px 13px;border-left:3px solid var(--acid);background:rgba(0,0,0,.045);color:#575650}.markdown :deep(pre){margin:14px 0;padding:14px;overflow:auto;background:#171717;color:#f6f5ee;border-radius:2px;font:12px/1.65 'DM Mono',monospace}.markdown :deep(pre code){padding:0;background:transparent;color:inherit}.markdown :deep(code){padding:2px 5px;background:rgba(17,17,17,.1);font:12px 'DM Mono',monospace}.markdown :deep(a){color:#456d00;text-decoration:underline;text-decoration-color:var(--acid);text-underline-offset:3px}.markdown :deep(table){width:100%;border-collapse:collapse;margin:13px 0;font-size:12px}.markdown :deep(th),.markdown :deep(td){padding:7px 9px;border:1px solid var(--line);text-align:left}.markdown :deep(th){background:rgba(0,0,0,.055)}
 </style>
