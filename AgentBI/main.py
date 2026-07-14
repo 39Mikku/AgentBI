@@ -1,5 +1,6 @@
 import os
 from contextlib import asynccontextmanager
+from datetime import timezone
 
 import uvicorn
 from fastapi import FastAPI
@@ -22,7 +23,7 @@ async def lifespan(app: FastAPI):
     app.state.login_agent = LoginAgent()
     mongo_uri = os.getenv("MONGO_URI")
     if mongo_uri:
-        client = MongoClient(mongo_uri)
+        client = MongoClient(mongo_uri, tz_aware=True, tzinfo=timezone.utc)
         app.state.mongo_client = client
         app.state.chat_repository = ChatRepository(client[os.getenv("MONGO_DATABASE", "chat_bi")])
         app.state.chat_repository.ensure_indexes()
