@@ -9,12 +9,14 @@ export const useChatStore = defineStore('chat', () => {
   const activeId = ref('')
   const loading = ref(false)
   const generating = ref(false)
+  const syncMessage = ref('')
   const error = ref('')
   const preferences = ref<ChatPreferences>({ temperature: 0.7, contextTurns: 8 })
   let controller: AbortController | null = null
   let currentUserId = ''
   let preferenceTimer: ReturnType<typeof setTimeout> | null = null
   const activeConversation = computed(() => conversations.value.find((item) => item.id === activeId.value) || null)
+  const isSyncing = computed(() => Boolean(syncMessage.value))
 
   function activeStorageKey(userId: string) { return `agentbi_active_conversation:${userId}` }
   function saveActiveConversation(userId: string, id: string) { localStorage.setItem(activeStorageKey(userId), id) }
@@ -46,7 +48,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function load(userId: string) {
-    loading.value = true
+    loading.value = true; syncMessage.value = '正在同步会话…'
     try {
       await restorePreferences(userId)
       conversations.value = await api.listConversations(userId)
@@ -64,15 +66,22 @@ export const useChatStore = defineStore('chat', () => {
         await select(target.id, userId)
       }
       else { activeId.value = ''; messages.value = [] }
-    } catch (err) { error.value = err instanceof Error ? err.message : '加载会话失败' } finally { loading.value = false }
+    } catch (err) { error.value = err instanceof Error ? err.message : '加载会话失败' } finally { loading.value = false; syncMessage.value = '' }
   }
   async function create(userId: string) {
     currentUserId = userId
-    const conversation = await api.createConversation({ user_id: userId, title: '未命名会话', temperature: preferences.value.temperature, context_turns: preferences.value.contextTurns, provider_id: preferences.value.providerId, model: preferences.value.model })
-    conversations.value.unshift(conversation); activeId.value = conversation.id; messages.value = []; saveActiveConversation(userId, conversation.id)
+    syncMessage.value = '正在创建新会话…'
+    try {
+      const conversation = await api.createConversation({ user_id: userId, title: '未命名会话', temperature: preferences.value.temperature, context_turns: preferences.value.contextTurns, provider_id: preferences.value.providerId, model: preferences.value.model })
+      conversations.value.unshift(conversation); activeId.value = conversation.id; messages.value = []; saveActiveConversation(userId, conversation.id)
+    } finally { syncMessage.value = '' }
   }
   async function select(id: string, userId: string) {
-    currentUserId = userId; activeId.value = id; saveActiveConversation(userId, id); messages.value = await api.listMessages(id, userId)
+    const ownsMessage = Boolean(syncMessage.value)
+    if (!ownsMessage) syncMessage.value = '正在加载会话…'
+    try {
+      currentUserId = userId; activeId.value = id; saveActiveConversation(userId, id); messages.value = await api.listMessages(id, userId)
+    } finally { if (!ownsMessage) syncMessage.value = '' }
   }
   async function rename(id: string, userId: string, title: string) {
     const normalized = title.trim()
@@ -143,18 +152,24 @@ export const useChatStore = defineStore('chat', () => {
   }
   async function selectVersion(userId: string, messageId: string) {
     if (!activeId.value) return
-    const updated = await api.setActiveMessage(activeId.value, userId, messageId)
-    const index = conversations.value.findIndex((item) => item.id === updated.id)
-    if (index !== -1) conversations.value[index] = updated
-    await select(activeId.value, userId)
+    syncMessage.value = '正在切换消息版本…'
+    try {
+      const updated = await api.setActiveMessage(activeId.value, userId, messageId)
+      const index = conversations.value.findIndex((item) => item.id === updated.id)
+      if (index !== -1) conversations.value[index] = updated
+      await select(activeId.value, userId)
+    } finally { syncMessage.value = '' }
   }
   async function branch(userId: string, messageId: string) {
     if (!activeId.value) return
-    const conversation = await api.createBranch(activeId.value, userId, messageId)
-    conversations.value.unshift(conversation)
-    await select(conversation.id, userId)
+    syncMessage.value = '正在创建分支会话…'
+    try {
+      const conversation = await api.createBranch(activeId.value, userId, messageId)
+      conversations.value.unshift(conversation)
+      await select(conversation.id, userId)
+    } finally { syncMessage.value = '' }
   }
   function stop() { controller?.abort() }
   async function remove(id: string, userId: string) { await api.deleteConversation(id, userId); conversations.value = conversations.value.filter((item) => item.id !== id); if (activeId.value === id) { activeId.value = ''; messages.value = []; clearActiveConversation(userId); if (conversations.value[0]) await select(conversations.value[0].id, userId) } }
-  return { conversations, messages, activeId, loading, generating, error, preferences, activeConversation, load, restorePreferences, persistPreferences, create, select, rename, send, retry, edit, selectVersion, branch, stop, remove }
+  return { conversations, messages, activeId, loading, generating, isSyncing, syncMessage, error, preferences, activeConversation, load, restorePreferences, persistPreferences, create, select, rename, send, retry, edit, selectVersion, branch, stop, remove }
 })
