@@ -233,6 +233,7 @@ onMounted(() => {
             <label class="check"><input v-model="form.capability_ids" type="checkbox" value="agent.email" />邮件子代理<small>撰写邮件、查询联系人并发送</small></label>
             <label class="check"><input v-model="form.capability_ids" type="checkbox" value="agent.music" />音乐子代理<small>网易云搜索、每日推荐与可播放卡片</small></label>
             <label class="check"><input v-model="form.capability_ids" type="checkbox" value="agent.bilibili" />Bilibili 视频子代理<small>搜索公开视频、获取详情并推送内嵌播放卡片</small></label>
+            <label class="check"><input v-model="form.capability_ids" type="checkbox" value="tool.web_search" />Tavily 网页搜索<small>直接检索实时网页信息与可引用来源，不启动子代理</small></label>
           </fieldset>
           <label class="check"><input v-model="form.include_runtime_context" type="checkbox" />注入运行时环境<small>向最新用户请求附加时间、时区、语言和用户名</small></label>
           <div class="avatar-field">

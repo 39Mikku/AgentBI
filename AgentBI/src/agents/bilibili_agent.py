@@ -7,7 +7,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from AgentBI.src.services.bilibili_client import BilibiliClient
-from AgentBI.src.schemas.subagent_settings_schema import BilibiliSubagentConfig
+from AgentBI.src.schemas.capability_settings_schema import BilibiliSubagentConfig
 from AgentBI.src.tools.bilibili_tools import (
     BilibiliToolResult,
     get_video_detail,

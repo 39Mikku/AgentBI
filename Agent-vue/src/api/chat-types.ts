@@ -53,21 +53,23 @@ export interface AssistantMemory {
   updated_at?: string | null
 }
 
-export interface SubagentSettingField {
+export interface CapabilitySettingField {
   key: string
   label: string
   description: string
-  type: 'number' | 'boolean' | 'text'
+  type: 'number' | 'boolean' | 'text' | 'select'
   minimum?: number | null
   maximum?: number | null
+  options?: Array<{ label: string; value: string }>
 }
 
-export interface SubagentSettings {
+export interface CapabilitySettings {
   capability_id: string
   display_name: string
   description: string
+  kind: 'subagent' | 'tool'
   config: Record<string, string | number | boolean>
-  fields: SubagentSettingField[]
+  fields: CapabilitySettingField[]
 }
 
 export type ModelRouteRole = 'embedding' | 'compression' | 'memory' | 'title'

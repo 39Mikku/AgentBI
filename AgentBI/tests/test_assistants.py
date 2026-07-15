@@ -9,7 +9,7 @@ class AssistantCapabilityTests(unittest.TestCase):
 
         self.assertEqual(
             [capability["id"] for capability in capabilities],
-            ["agent.email", "agent.music", "agent.bilibili"],
+            ["agent.email", "agent.music", "agent.bilibili", "tool.web_search"],
         )
 
     def test_unknown_capabilities_are_not_exposed_to_the_model(self):
@@ -41,7 +41,7 @@ class AssistantCapabilityTests(unittest.TestCase):
 
             self.assertEqual(
                 refreshed["capability_ids"],
-                ["agent.email", "agent.music", "agent.bilibili"],
+                ["agent.email", "agent.music", "agent.bilibili", "tool.web_search"],
             )
         finally:
             repository.close()
@@ -62,7 +62,7 @@ class AssistantCapabilityTests(unittest.TestCase):
 
             self.assertEqual(
                 loaded["capability_ids"],
-                ["agent.email", "agent.music", "agent.bilibili"],
+                ["agent.email", "agent.music", "agent.bilibili", "tool.web_search"],
             )
         finally:
             repository.close()

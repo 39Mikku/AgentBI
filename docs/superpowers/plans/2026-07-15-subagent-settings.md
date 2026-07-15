@@ -1,19 +1,20 @@
-# 子代理全局配置 Implementation Plan
+# 能力全局配置与 Tavily 搜索 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为每个用户提供跨助手共享、按子代理能力完全隔离的配置，并让音乐、Bilibili 子代理在运行时读取自己的参数。
+**Goal:** 为每个用户提供跨助手共享、按能力完全隔离的配置，并接入由主模型直接调用的 Tavily 网页搜索工具。
 
-**Architecture:** SQLite 使用 `(user_id, capability_id)` 作为唯一键保存 JSON 配置；注册表定义每个子代理的默认值、校验模型和 UI 元数据。助手仍只保存 `capability_ids`，主会话委派时按当前用户和目标能力读取配置。前端新增与模型工作室同级的子代理配置页。
+**Architecture:** SQLite 使用 `(user_id, capability_id)` 作为唯一键保存 JSON 配置；统一注册表容纳直接工具与子代理，并为每项能力定义独立校验模型和 UI 元数据。助手只保存 `capability_ids`；Tavily 结果作为 tool message 回到主模型循环，子代理仍执行各自的专项循环。
 
 **Tech Stack:** FastAPI、Pydantic、SQLite、Vue 3、TypeScript、CSS。
 
 ## Global Constraints
 
-- 不在配置表中加入 `assistant_id`。
+- 使用 `capability_settings`，不在配置表中加入 `assistant_id`。
 - 不同 `capability_id` 的配置不得互相读取或覆盖。
 - 未保存配置时使用子代理注册时的默认值。
 - 默认助手和自定义助手挂载同一能力时读取同一份用户配置。
+- `tool.web_search` 不启动子代理模型，调用后必须回到主模型继续生成。
 - Git 提交由用户手动完成，本计划不执行暂存或提交。
 
 ---

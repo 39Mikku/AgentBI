@@ -45,7 +45,7 @@ class SqliteChatRepository:
                     user_id TEXT PRIMARY KEY, provider_id TEXT, model TEXT, temperature REAL NOT NULL,
                     context_turns INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS subagent_settings (
+                CREATE TABLE IF NOT EXISTS capability_settings (
                     user_id TEXT NOT NULL, capability_id TEXT NOT NULL,
                     config_json TEXT NOT NULL DEFAULT '{}', updated_at TEXT NOT NULL,
                     PRIMARY KEY(user_id, capability_id)
@@ -116,6 +116,11 @@ class SqliteChatRepository:
                     ON message_embeddings(user_id, assistant_id, model_key);
                 """
             )
+            if self._one("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'subagent_settings'"):
+                self._connection.execute(
+                    """INSERT OR IGNORE INTO capability_settings(user_id, capability_id, config_json, updated_at)
+                    SELECT user_id, capability_id, config_json, updated_at FROM subagent_settings"""
+                )
             assistant_columns = {
                 "memory_enabled": "INTEGER NOT NULL DEFAULT 0",
                 "memory_update_interval": "INTEGER NOT NULL DEFAULT 12",
@@ -282,15 +287,15 @@ class SqliteChatRepository:
             )
         return self.get_preferences(user_id)
 
-    def get_subagent_config(self, user_id: str, capability_id: str) -> dict[str, Any] | None:
+    def get_capability_config(self, user_id: str, capability_id: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._one(
-                "SELECT config_json FROM subagent_settings WHERE user_id = ? AND capability_id = ?",
+                "SELECT config_json FROM capability_settings WHERE user_id = ? AND capability_id = ?",
                 (user_id, capability_id),
             )
         return self._json_load(row["config_json"], {}) if row else None
 
-    def save_subagent_config(
+    def save_capability_config(
         self,
         user_id: str,
         capability_id: str,
@@ -299,12 +304,12 @@ class SqliteChatRepository:
         now = self._time()
         with self._lock, self._connection:
             self._connection.execute(
-                """INSERT INTO subagent_settings(user_id, capability_id, config_json, updated_at)
+                """INSERT INTO capability_settings(user_id, capability_id, config_json, updated_at)
                 VALUES (?, ?, ?, ?) ON CONFLICT(user_id, capability_id) DO UPDATE SET
                 config_json=excluded.config_json, updated_at=excluded.updated_at""",
                 (user_id, capability_id, self._json_dump(config), now),
             )
-        return self.get_subagent_config(user_id, capability_id) or {}
+        return self.get_capability_config(user_id, capability_id) or {}
 
     def save_model_route(self, user_id: str, role: str, fields: dict[str, Any]) -> dict[str, Any]:
         now = self._time()

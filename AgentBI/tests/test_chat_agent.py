@@ -1,3 +1,4 @@
+import json
 import unittest
 
 
@@ -6,7 +7,16 @@ class ChatAgentTests(unittest.TestCase):
         from AgentBI.src.agents.chat_agent import ChatAgent
 
         names = {tool["function"]["name"] for tool in ChatAgent.tool_definitions()}
-        self.assertEqual(names, {"delegate_email", "delegate_music", "delegate_bilibili"})
+        self.assertEqual(names, {"delegate_email", "delegate_music", "delegate_bilibili", "search_web"})
+
+    def test_web_search_is_exposed_only_when_direct_tool_is_mounted(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        disabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions(["agent.email"])}
+        enabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions(["tool.web_search"])}
+
+        self.assertEqual(disabled, {"delegate_email"})
+        self.assertEqual(enabled, {"search_web"})
 
     def test_music_delegation_is_exposed_only_when_capability_is_mounted(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
@@ -129,6 +139,40 @@ class ChatAgentHistoryFailureTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("历史会话检索失败", result)
         self.assertIn("batch size is invalid", result)
+
+
+class ChatAgentWebSearchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_web_search_uses_its_own_capability_config(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        class Repository:
+            def get_capability_config(self, user_id, capability_id):
+                self.request = (user_id, capability_id)
+                return {"max_results": 4, "search_depth": "fast"}
+
+        class SearchClient:
+            async def search(self, query, **options):
+                self.request = (query, options)
+                return {
+                    "query": query,
+                    "results": [{"title": "Result", "url": "https://example.com", "content": "Answer", "score": 0.9}],
+                }
+
+        repository = Repository()
+        search_client = SearchClient()
+        result = await ChatAgent(
+            capability_ids=["tool.web_search"],
+            repository=repository,
+            user_id="user@example.com",
+            web_search_client=search_client,
+        )._invoke_direct_tool("search_web", '{"query":"current news","topic":"news"}')
+
+        self.assertEqual(repository.request, ("user@example.com", "tool.web_search"))
+        self.assertEqual(search_client.request[0], "current news")
+        self.assertEqual(search_client.request[1]["max_results"], 4)
+        self.assertEqual(search_client.request[1]["search_depth"], "fast")
+        self.assertEqual(search_client.request[1]["topic"], "news")
+        self.assertEqual(json.loads(result)["results"][0]["url"], "https://example.com")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from AgentBI.src.api.user_profile import router as user_profile_router
 from AgentBI.src.api.model_routes import router as model_route_router
 from AgentBI.src.api.assistants import router as assistant_router
 from AgentBI.src.api.music import router as music_router
-from AgentBI.src.api.subagent_settings import router as subagent_settings_router
+from AgentBI.src.api.capability_settings import router as capability_settings_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 from AgentBI.src.services.music_api_process import MusicApiProcessManager
@@ -55,7 +55,7 @@ app.include_router(assistant_router)
 app.include_router(conversation_router)
 app.include_router(chat_router)
 app.include_router(music_router)
-app.include_router(subagent_settings_router)
+app.include_router(capability_settings_router)
 
 
 @app.get("/")

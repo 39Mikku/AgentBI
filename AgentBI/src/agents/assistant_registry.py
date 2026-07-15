@@ -38,6 +38,42 @@ class SubagentRegistration:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class DirectToolRegistration:
+    capability_id: str
+    display_name: str
+    description: str
+    prompt: str
+    tool_name: str
+    tool_description: str
+
+    def tool_definition(self) -> dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.tool_name,
+                "description": self.tool_description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "要搜索的完整问题或关键词"},
+                        "topic": {
+                            "type": "string",
+                            "enum": ["general", "news", "finance"],
+                            "description": "普通内容、实时新闻或金融内容",
+                        },
+                        "time_range": {
+                            "type": "string",
+                            "enum": ["day", "week", "month", "year"],
+                            "description": "可选的发布时间范围",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        }
+
+
 SUBAGENTS = (
     SubagentRegistration(
         capability_id="agent.email",
@@ -77,7 +113,22 @@ SUBAGENTS = (
     ),
 )
 
+DIRECT_TOOLS = (
+    DirectToolRegistration(
+        capability_id="tool.web_search",
+        display_name="Tavily 网页搜索",
+        description="检索实时网页信息并返回可引用的标题、摘要与来源链接。",
+        prompt=(
+            "当问题需要当前、外部或无法从已有上下文确认的信息时，可调用 search_web。"
+            "回答时应使用搜索结果中的 URL 作为 Markdown 来源链接。"
+        ),
+        tool_name="search_web",
+        tool_description="使用 Tavily 搜索当前网页信息，返回带 URL 的结构化来源；仅在需要外部信息时调用。",
+    ),
+)
+
 _SUBAGENTS_BY_DELEGATE = {registration.delegate_name: registration for registration in SUBAGENTS}
+_DIRECT_TOOLS_BY_NAME = {registration.tool_name: registration for registration in DIRECT_TOOLS}
 CAPABILITIES: dict[str, dict[str, str]] = {
     registration.capability_id: {
         "id": registration.capability_id,
@@ -88,6 +139,16 @@ CAPABILITIES: dict[str, dict[str, str]] = {
     }
     for registration in SUBAGENTS
 }
+CAPABILITIES.update({
+    registration.capability_id: {
+        "id": registration.capability_id,
+        "name": registration.display_name,
+        "kind": "tool",
+        "description": registration.description,
+        "prompt": registration.prompt,
+    }
+    for registration in DIRECT_TOOLS
+})
 
 DEFAULT_ASSISTANT_CAPABILITIES = list(CAPABILITIES)
 
@@ -113,8 +174,21 @@ def delegation_tool_definitions(capability_ids: list[str] | None) -> list[dict[s
     ]
 
 
+def direct_tool_definitions(capability_ids: list[str] | None) -> list[dict[str, Any]]:
+    enabled = set(capability_ids or [])
+    return [
+        registration.tool_definition()
+        for registration in DIRECT_TOOLS
+        if registration.capability_id in enabled
+    ]
+
+
 def get_subagent_registration(delegate_name: str) -> SubagentRegistration | None:
     return _SUBAGENTS_BY_DELEGATE.get(delegate_name)
+
+
+def get_direct_tool_registration(tool_name: str) -> DirectToolRegistration | None:
+    return _DIRECT_TOOLS_BY_NAME.get(tool_name)
 
 
 def create_subagent(

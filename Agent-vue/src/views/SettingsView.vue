@@ -110,7 +110,7 @@ onMounted(async () => { await chat.restorePreferences(userId.value); await load(
   <main class="settings">
     <header>
       <button class="back" @click="router.push('/chat')">← 返回工作台</button>
-      <nav class="settings-nav" aria-label="配置模块"><button class="active">模型路由</button><button @click="router.push('/settings/subagents')">子代理</button></nav>
+      <nav class="settings-nav" aria-label="配置模块"><button class="active">模型路由</button><button @click="router.push('/settings/capabilities')">能力</button></nav>
       <p>MODEL STUDIO / 01</p>
       <h1>模型，<em>由你定义。</em></h1>
       <span>连接任意 OpenAI-compatible 端点；模型列表从提供商实时获取。</span>

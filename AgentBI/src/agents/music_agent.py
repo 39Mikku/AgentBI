@@ -7,7 +7,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from AgentBI.src.services.netease_music_client import NeteaseMusicClient
-from AgentBI.src.schemas.subagent_settings_schema import MusicSubagentConfig
+from AgentBI.src.schemas.capability_settings_schema import MusicSubagentConfig
 from AgentBI.src.tools.music_tools import (
     MusicToolResult,
     daily_recommendations,
