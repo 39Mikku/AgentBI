@@ -5,6 +5,8 @@ import type {
   TtsSynthesisPayload,
   TtsSynthesisResponse,
   TtsVoiceInput,
+  VoiceScriptGeneratePayload,
+  VoiceScriptGenerateResponse,
 } from './toolbox-tts-types'
 
 const BASE = '/api/toolbox/tts'
@@ -21,6 +23,13 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const listTtsCapabilities = () => requestJson<TtsCapabilities>('/capabilities')
+
+export const generateVoiceScript = (payload: VoiceScriptGeneratePayload) =>
+  requestJson<VoiceScriptGenerateResponse>('/script/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
 
 export const listTtsVoices = (userId: string) =>
   requestJson<TtsCustomVoice[]>(`/voices?user_id=${encodeURIComponent(userId)}`)

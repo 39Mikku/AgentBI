@@ -19,6 +19,10 @@ export interface ObjectUrlRuntime {
   revokeObjectURL(url: string): void
 }
 
+export function applyGeneratedScript(_currentText: string, generatedText: string): string {
+  return generatedText.trim()
+}
+
 export function availableVoices(
   provider: TtsCapabilityProvider,
   modelId: string,

@@ -18,6 +18,25 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class VoiceScriptGenerateRequest(_StrictModel):
+    user_id: str = Field(min_length=1, max_length=320)
+    instruction: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("user_id", "instruction")
+    @classmethod
+    def strip_script_fields(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("字段不能为空")
+        return normalized
+
+
+class VoiceScriptGenerateResponse(_StrictModel):
+    text: str
+    provider_name: str
+    model: str
+
+
 class LiveVoiceEnrollmentRequest(_StrictModel):
     user_id: str = Field(min_length=1, max_length=320)
     display_name: str = Field(min_length=1, max_length=80)

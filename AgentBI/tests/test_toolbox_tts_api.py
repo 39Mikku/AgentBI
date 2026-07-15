@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from AgentBI.src.api.toolbox_tts import router
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
+from AgentBI.src.services.model_task_service import ModelTaskResult
 from AgentBI.src.services.toolbox.tts.base import TtsProviderError, TtsSynthesisResult
 from AgentBI.src.services.toolbox.tts.bailian_voice_enrollment import LiveVoiceEnrollmentResult
 
@@ -44,6 +45,19 @@ class FakeEnrollmentAdapter:
         )
 
 
+class FakeModelTaskService:
+    def __init__(self):
+        self.request = None
+
+    async def complete_with_chat_preferences(self, user_id, system, prompt):
+        self.request = {"user_id": user_id, "system": system, "prompt": prompt}
+        return ModelTaskResult(
+            text=" 这是生成的旁白 ",
+            provider_name="NewAPI",
+            model="chat-model",
+        )
+
+
 class ToolboxTtsApiTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -52,6 +66,8 @@ class ToolboxTtsApiTests(unittest.TestCase):
         app.state.chat_repository = self.repository
         app.state.tts_provider_registry = FakeRegistry()
         app.state.live_voice_enrollment_adapter = FakeEnrollmentAdapter()
+        self.model_task_service = FakeModelTaskService()
+        app.state.model_task_service = self.model_task_service
         app.include_router(router)
         self.client = TestClient(app)
 
@@ -94,6 +110,25 @@ class ToolboxTtsApiTests(unittest.TestCase):
             self.client.delete(f"/toolbox/tts/voices/{voice['id']}?user_id=alice").status_code,
             204,
         )
+
+    def test_generate_script_returns_plain_text_and_model_metadata(self):
+        response = self.client.post(
+            "/toolbox/tts/script/generate",
+            json={"user_id": "alice", "instruction": "写一段旅行旁白"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "text": "这是生成的旁白",
+                "provider_name": "NewAPI",
+                "model": "chat-model",
+            },
+        )
+        self.assertEqual(self.model_task_service.request["user_id"], "alice")
+        self.assertEqual(self.model_task_service.request["prompt"], "写一段旅行旁白")
+        self.assertIn("只输出", self.model_task_service.request["system"])
 
     def test_live_enrollment_persists_friendly_name_remote_id_and_exact_model(self):
         signed_url = "https://bucket.oss-cn-beijing.aliyuncs.com/sample.mp3?signature=secret"

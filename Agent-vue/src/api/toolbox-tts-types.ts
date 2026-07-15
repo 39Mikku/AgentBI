@@ -39,6 +39,17 @@ export interface TtsCapabilities {
   providers: TtsCapabilityProvider[]
 }
 
+export interface VoiceScriptGeneratePayload {
+  user_id: string
+  instruction: string
+}
+
+export interface VoiceScriptGenerateResponse {
+  text: string
+  provider_name: string
+  model: string
+}
+
 export interface TtsCustomVoice {
   id: string
   user_id: string

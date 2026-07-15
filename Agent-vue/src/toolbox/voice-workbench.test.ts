@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { TtsCapabilityProvider, TtsCustomVoice, TtsTrackConfig } from '@/api/toolbox-tts-types'
-import { availableLiveVoices, availableVoices, generateTracks } from './voice-workbench'
+import { applyGeneratedScript, availableLiveVoices, availableVoices, generateTracks } from './voice-workbench'
 
 
 const bailian: TtsCapabilityProvider = {
@@ -59,6 +59,10 @@ const track = (id: string): TtsTrackConfig => ({
 })
 
 describe('voice workbench runtime', () => {
+  it('overwrites the current narration only after a successful generation', () => {
+    expect(applyGeneratedScript('旧正文', ' 新正文 ')).toBe('新正文')
+  })
+
   it('filters Live catalog voices by exact model and maps friendly names to remote ids', () => {
     const plus = availableLiveVoices('qwen-audio-3.0-realtime-plus', liveVoices)
     const flash = availableLiveVoices('qwen-audio-3.0-realtime-flash', liveVoices)

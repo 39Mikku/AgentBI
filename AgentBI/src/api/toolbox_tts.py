@@ -13,6 +13,13 @@ from AgentBI.src.schemas.toolbox_tts_schema import (
     TtsVoiceCreate,
     TtsVoiceResponse,
     TtsVoiceUpdate,
+    VoiceScriptGenerateRequest,
+    VoiceScriptGenerateResponse,
+)
+from AgentBI.src.services.model_task_service import (
+    ModelTaskConfigurationError,
+    ModelTaskEmptyResponseError,
+    ModelTaskService,
 )
 from AgentBI.src.services.toolbox.tts.bailian_voice_enrollment import (
     BailianLiveVoiceEnrollmentAdapter,
@@ -26,6 +33,9 @@ from AgentBI.src.services.toolbox.tts.registry import TtsProviderRegistry
 
 
 router = APIRouter(prefix="/toolbox/tts", tags=["toolbox-tts"])
+
+VOICE_SCRIPT_SYSTEM_PROMPT = """你是专业的中文配音文案作者。根据用户要求直接生成可朗读的最终正文。
+只输出正文，不要标题、解释、分析、Markdown、代码块、引号包裹，也不要使用“好的”“以下是”等开场语。"""
 
 
 def get_tts_provider_registry(request: Request) -> TtsProviderRegistry:
@@ -48,9 +58,39 @@ def get_live_voice_enrollment_adapter(request: Request) -> BailianLiveVoiceEnrol
     return adapter
 
 
+def get_model_task_service(request: Request) -> ModelTaskService:
+    service = getattr(request.app.state, "model_task_service", None)
+    if service is None:
+        service = ModelTaskService(get_chat_repository(request))
+        request.app.state.model_task_service = service
+    return service
+
+
 @router.get("/capabilities", response_model=TtsCapabilityResponse)
 def list_tts_capabilities(request: Request):
     return {"providers": get_tts_provider_registry(request).capabilities()}
+
+
+@router.post("/script/generate", response_model=VoiceScriptGenerateResponse)
+async def generate_voice_script(request: Request, payload: VoiceScriptGenerateRequest):
+    try:
+        result = await get_model_task_service(request).complete_with_chat_preferences(
+            payload.user_id,
+            VOICE_SCRIPT_SYSTEM_PROMPT,
+            payload.instruction,
+        )
+    except ModelTaskConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ModelTaskEmptyResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"文案生成失败：{exc}") from exc
+
+    return VoiceScriptGenerateResponse(
+        text=result.text.strip()[:10000],
+        provider_name=result.provider_name,
+        model=result.model,
+    )
 
 
 @router.get("/voices", response_model=list[TtsVoiceResponse])

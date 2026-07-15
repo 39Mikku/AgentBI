@@ -4,6 +4,19 @@ from pydantic import ValidationError
 
 
 class ToolboxTtsContractTests(unittest.TestCase):
+    def test_voice_script_instruction_is_trimmed_and_limited(self):
+        from AgentBI.src.schemas.toolbox_tts_schema import VoiceScriptGenerateRequest
+
+        payload = VoiceScriptGenerateRequest(
+            user_id=" alice ",
+            instruction=" 写一段旅行旁白 ",
+        )
+
+        self.assertEqual(payload.user_id, "alice")
+        self.assertEqual(payload.instruction, "写一段旅行旁白")
+        with self.assertRaises(ValidationError):
+            VoiceScriptGenerateRequest(user_id="alice", instruction="x" * 4001)
+
     def test_live_voice_enrollment_requires_https_supported_model_and_safe_prefix(self):
         from AgentBI.src.schemas.toolbox_tts_schema import LiveVoiceEnrollmentRequest
 
