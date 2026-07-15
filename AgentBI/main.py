@@ -17,11 +17,17 @@ from AgentBI.src.api.music import router as music_router
 from AgentBI.src.api.capability_settings import router as capability_settings_router
 from AgentBI.src.api.live import router as live_router
 from AgentBI.src.api.toolbox_tts import router as toolbox_tts_router
+from AgentBI.src.api.toolbox_system import router as toolbox_system_router
+from AgentBI.src.api.toolbox_file_time import router as toolbox_file_time_router
+from AgentBI.src.api.toolbox_auto_input import router as toolbox_auto_input_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 from AgentBI.src.services.music_api_process import MusicApiProcessManager
 from AgentBI.src.services.toolbox.tts.registry import TtsProviderRegistry
 from AgentBI.src.services.toolbox.tts.bailian_voice_enrollment import BailianLiveVoiceEnrollmentAdapter
+from AgentBI.src.services.toolbox.directory_picker import NativeDirectoryPicker
+from AgentBI.src.services.toolbox.file_time.service import FileTimeService
+from AgentBI.src.services.toolbox.auto_input.service import AutoInputService
 
 logger = Logger.get_logger(__name__)
 
@@ -36,6 +42,9 @@ async def lifespan(app: FastAPI):
         api_key=os.getenv("DASHSCOPE_API_KEY", ""),
         workspace_id=os.getenv("DASHSCOPE_WORKSPACE_ID", ""),
     )
+    app.state.directory_picker = NativeDirectoryPicker()
+    app.state.file_time_service = FileTimeService()
+    app.state.auto_input_service = AutoInputService()
     music_process = MusicApiProcessManager(
         enabled=os.getenv("NCM_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
         port=int(os.getenv("NCM_API_PORT", "3300")),
@@ -67,6 +76,9 @@ app.include_router(music_router)
 app.include_router(capability_settings_router)
 app.include_router(live_router)
 app.include_router(toolbox_tts_router)
+app.include_router(toolbox_system_router)
+app.include_router(toolbox_file_time_router)
+app.include_router(toolbox_auto_input_router)
 
 
 @app.get("/")

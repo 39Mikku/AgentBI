@@ -47,6 +47,18 @@ const router = createRouter({
       meta: { title: 'Voice Lab · AgentBI', requiresAuth: true },
     },
     {
+      path: '/toolbox/file-time',
+      name: 'file-time-workbench',
+      component: () => import('@/views/FileTimeView.vue'),
+      meta: { title: 'File Time · AgentBI', requiresAuth: true },
+    },
+    {
+      path: '/toolbox/auto-input',
+      name: 'auto-input-workbench',
+      component: () => import('@/views/AutoInputView.vue'),
+      meta: { title: 'Auto Type · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/settings/models',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
