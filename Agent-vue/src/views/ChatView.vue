@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import ModelAvatar from '@/components/ModelAvatar.vue'
 import TimelineCard from '@/components/cards/TimelineCard.vue'
 import BilibiliPlayerModal from '@/components/BilibiliPlayerModal.vue'
+import ToolEventDetails from '@/components/chat/ToolEventDetails.vue'
 import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -396,13 +397,12 @@ onMounted(async () => {
                   <summary>推理摘要</summary>
                   <p>{{ event.content }}</p>
                 </details>
-                <div
+                <ToolEventDetails
                   v-else-if="event.type === 'tool_started' || event.type === 'tool_finished'"
-                  class="tool-event"
-                >
-                  {{ event.tool || '工具' }} ·
-                  {{ event.content || (event.type === 'tool_started' ? '执行中' : '已完成') }}
-                </div>
+                  :type="event.type"
+                  :tool="event.tool"
+                  :content="event.content"
+                />
                 <TimelineCard
                   v-else-if="event.type === 'card'"
                   :kind="event.kind"
@@ -425,9 +425,13 @@ onMounted(async () => {
                 <summary>推理摘要</summary>
                 <p>{{ message.reasoning_summary }}</p>
               </details>
-              <div v-for="(event, index) in message.tool_events" :key="index" class="tool-event">
-                {{ event.tool || '工具' }} · {{ event.content || '执行中' }}
-              </div>
+              <ToolEventDetails
+                v-for="(event, index) in message.tool_events"
+                :key="index"
+                :type="event.type === 'tool_finished' ? 'tool_finished' : 'tool_started'"
+                :tool="typeof event.tool === 'string' ? event.tool : undefined"
+                :content="typeof event.content === 'string' ? event.content : undefined"
+              />
               <template v-if="message.role === 'user' && editingMessageId === message.id">
                 <textarea
                   v-model="editingMessageContent"
@@ -1095,8 +1099,7 @@ onMounted(async () => {
 .message.user .message-content {
   font-weight: 600;
 }
-.reasoning,
-.tool-event {
+.reasoning {
   margin: 0 0 10px;
   border-left: 2px solid #a0a099;
   padding: 8px 11px;
@@ -1110,10 +1113,6 @@ onMounted(async () => {
 }
 .reasoning p {
   margin: 6px 0 0;
-}
-.tool-event {
-  border-left-color: var(--acid);
-  color: #4b4b43;
 }
 .cursor {
   display: inline-block;
