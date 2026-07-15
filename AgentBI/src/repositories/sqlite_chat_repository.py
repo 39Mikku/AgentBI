@@ -9,6 +9,13 @@ from uuid import uuid4
 from AgentBI.src.agents.assistant_registry import DEFAULT_ASSISTANT_CAPABILITIES, DEFAULT_ASSISTANT_PROMPT
 
 
+DEFAULT_LIVE_PREFERENCES = {
+    "model": "qwen-audio-3.0-realtime-flash",
+    "voice": "longanqian",
+    "instructions": "你是一位自然、简洁的实时语音助手。请使用适合口语朗读的纯文本回答。",
+}
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -44,6 +51,10 @@ class SqliteChatRepository:
                 CREATE TABLE IF NOT EXISTS chat_preferences (
                     user_id TEXT PRIMARY KEY, provider_id TEXT, model TEXT, temperature REAL NOT NULL,
                     context_turns INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS live_preferences (
+                    user_id TEXT PRIMARY KEY, model TEXT NOT NULL, voice TEXT NOT NULL,
+                    instructions TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS capability_settings (
                     user_id TEXT NOT NULL, capability_id TEXT NOT NULL,
@@ -286,6 +297,24 @@ class SqliteChatRepository:
                 (user_id, values.get("provider_id"), values.get("model"), values["temperature"], values["context_turns"], now, now),
             )
         return self.get_preferences(user_id)
+
+    def get_live_preferences(self, user_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._one("SELECT * FROM live_preferences WHERE user_id = ?", (user_id,))
+        return dict(row) if row else {"user_id": user_id, **DEFAULT_LIVE_PREFERENCES}
+
+    def save_live_preferences(self, user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+        values = {**self.get_live_preferences(user_id), **fields}
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO live_preferences(user_id, model, voice, instructions, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
+                model=excluded.model, voice=excluded.voice, instructions=excluded.instructions,
+                updated_at=excluded.updated_at""",
+                (user_id, values["model"], values["voice"], values["instructions"], now, now),
+            )
+        return self.get_live_preferences(user_id)
 
     def get_capability_config(self, user_id: str, capability_id: str) -> dict[str, Any] | None:
         with self._lock:

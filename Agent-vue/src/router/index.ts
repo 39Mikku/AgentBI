@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { title: 'Obsidian · AgentBI', requiresAuth: true },
     },
     {
+      path: '/live',
+      name: 'live',
+      component: () => import('@/views/LiveView.vue'),
+      meta: { title: 'Live · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/settings/models',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),

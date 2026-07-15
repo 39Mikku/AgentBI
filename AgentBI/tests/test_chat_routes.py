@@ -11,6 +11,7 @@ class ChatRouteTests(unittest.TestCase):
         from AgentBI.src.api.model_routes import router as model_route_router
         from AgentBI.src.api.music import router as music_router
         from AgentBI.src.api.capability_settings import router as capability_settings_router
+        from AgentBI.src.api.live import router as live_router
 
         chat_paths = {route.path for route in chat_router.routes}
         conversation_paths = {route.path for route in conversation_router.routes}
@@ -20,6 +21,7 @@ class ChatRouteTests(unittest.TestCase):
         model_route_paths = {route.path for route in model_route_router.routes}
         music_paths = {route.path for route in music_router.routes}
         capability_settings_paths = {route.path for route in capability_settings_router.routes}
+        live_paths = {route.path for route in live_router.routes}
 
         self.assertIn("/chat/stream", chat_paths)
         self.assertIn("/conversations", conversation_paths)
@@ -38,6 +40,8 @@ class ChatRouteTests(unittest.TestCase):
         self.assertIn("/music/tracks/{track_id}/stream", music_paths)
         self.assertIn("/capabilities/settings", capability_settings_paths)
         self.assertIn("/capabilities/{capability_id}/settings", capability_settings_paths)
+        self.assertIn("/live/preferences", live_paths)
+        self.assertIn("/live/ws", live_paths)
 
 
 if __name__ == "__main__":

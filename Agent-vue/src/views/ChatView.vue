@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import ModelAvatar from '@/components/ModelAvatar.vue'
 import TimelineCard from '@/components/cards/TimelineCard.vue'
 import BilibiliPlayerModal from '@/components/BilibiliPlayerModal.vue'
+import AppModeSwitcher from '@/components/AppModeSwitcher.vue'
 import ToolEventDetails from '@/components/chat/ToolEventDetails.vue'
 import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
@@ -248,6 +249,7 @@ onMounted(async () => {
   <div class="workbench" :class="{ 'sidebar-open': menuOpen }">
     <aside class="rail">
       <div class="rail-brand"><span class="brand-orbit"></span><span>OBSIDIAN</span><i>AI</i></div>
+      <AppModeSwitcher active="studio" class="rail-mode-switcher" />
       <button class="new-session" @click="newChat"><span>＋</span> 新建对话 <kbd>⌘ K</kbd></button>
       <div class="assistant-switch">
         <button class="assistant-current" @click="assistantMenuOpen = !assistantMenuOpen">
@@ -653,6 +655,10 @@ onMounted(async () => {
   inset: 3px;
   border-radius: 50%;
   background: var(--acid);
+}
+.rail-mode-switcher {
+  flex: 0 0 auto;
+  margin: -15px 0 14px;
 }
 .new-session {
   border: 1px solid rgba(255, 255, 255, 0.27);
