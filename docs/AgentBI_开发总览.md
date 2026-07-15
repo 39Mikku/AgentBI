@@ -1,7 +1,7 @@
 # AgentBI 开发总览
 
 > 更新日期：2026-07-15
-> 当前阶段：本地 SQLite 驱动的聊天工作台、消息 DAG、助手模块与邮件子代理已落地。
+> 当前阶段：本地 SQLite 驱动的聊天工作台、消息 DAG、助手记忆/历史检索/上下文压缩与后台模型路由已落地。
 
 ## 1. 当前架构
 
@@ -11,7 +11,12 @@ flowchart LR
   API --> Repo[SqliteChatRepository]
   Repo --> DB[(AgentBI/data/agentbi.sqlite3)]
   API --> Chat[ChatAgent]
+  API --> Memory[MemoryService]
+  Memory --> Tasks[ModelTaskService]
+  Tasks --> LLM
+  Memory --> Repo
   Chat -->|delegate_email| MailAgent[EmailAgent]
+  Chat -->|search_assistant_history| Memory
   Chat --> LLM[OpenAI-compatible Provider]
   MailAgent --> Lookup[lookup_recipient]
   Lookup --> Repo
@@ -23,7 +28,8 @@ flowchart LR
 
 - 浏览器只访问 FastAPI；模型 API Key 与 SMTP 配置仅由后端使用。
 - `SqliteChatRepository` 是当前唯一的业务持久化边界：用户、验证码、提供商、偏好、助手、会话、消息 DAG 与运行记录均保存在 SQLite。
-- `ChatAgent` 只暴露 `delegate_email`。收件人检索、邮件撰写和 SMTP 发送由 `EmailAgent` 完成；主会话没有通用数据查询工具。
+- `ChatAgent` 固定保留 `delegate_email`，并仅在助手启用历史检索时暴露 `search_assistant_history`。后者由模型按需调用，不会逐轮强制检索。
+- `MemoryService` 负责助手核心记忆、历史向量索引、上下文压缩与首轮标题；`ModelTaskService` 复用提供商配置执行四类后台模型任务。
 - 流式调用使用 OpenAI-compatible Chat Completions；SSE 事件按真实发生顺序写入消息时间线。
 
 ## 2. 目录与模块
@@ -40,7 +46,7 @@ AgentBI/
   data/agentbi.sqlite3 本地开发数据库（运行时生成，未纳入 Git）
   src/api/             登录、资料、聊天、会话、提供商、助手路由
   src/repositories/    SQLite 数据访问实现
-  src/services/        LoginService、上下文构建、SSE、模型发现
+  src/services/        LoginService、上下文/记忆、后台模型任务、SSE、模型发现
   src/agents/          ChatAgent、EmailAgent、助手能力注册
   src/tools/           SMTP 邮件原子能力
   src/schemas/         Pydantic 请求/响应模型
@@ -56,7 +62,10 @@ AgentBI/
 | `provider_profiles` | OpenAI-compatible 端点与模型列表 |
 | `chat_preferences` | 用户模型、温度、上下文轮次偏好 |
 | `assistants` | 默认/自定义助手、提示词、能力挂载、头像与环境变量开关 |
-| `chat_threads` | 会话元数据、当前活跃分支与所用助手 |
+| `model_routes` | 每个用户的向量、压缩、记忆、标题模型分工 |
+| `assistant_memories` | 每个用户与助手的一份可编辑核心记忆 |
+| `message_embeddings` | 同助手历史消息的本地向量索引 |
+| `chat_threads` | 会话元数据、当前活跃分支、所用助手与压缩摘要缓存 |
 | `chat_messages` | 用 `parent_id` 表示的不可变消息 DAG、版本组和时间线 |
 | `chat_runs` | 单次生成的配置快照和状态 |
 
@@ -66,10 +75,13 @@ AgentBI/
 
 - 邮箱验证码登录：已注册用户可通过用户名或邮箱登录；首次以邮箱验证后自动创建用户。成功响应返回规范化 `user_id`，前端以其作为所有数据归属。
 - 用户资料：用户名、邮箱与头像都保存在 `users` 表；头像上传跨刷新保留。
-- 多提供商模型配置：保存端点、密钥、默认模型；可从 `/models` 同步模型列表。
+- 多提供商模型配置：保存端点、密钥、默认模型；可从 `/models` 同步模型列表，并分别选择聊天、向量、压缩、记忆与标题模型。
 - 会话与版本：新建、重命名、删除、编辑用户消息、重试助手消息、版本切换和从任意节点创建分支会话。
-- 上下文：从当前活跃链截取指定轮次；可由助手配置决定是否注入时间、时区、语言和用户名等运行环境变量。
-- 助手：默认助手挂载所有已注册能力；自定义助手可设置提示词、头像和启用能力，且会话列表按助手隔离。
+- 上下文：支持滚动窗口与总结压缩两种策略。压缩只改变模型请求，不删除消息；切回滚动窗口会立即忽略摘要。摘要锚点不属于当前 DAG 分支时不会注入。
+- 助手：默认助手挂载所有已注册能力；自定义助手可设置提示词、头像和启用能力，且会话列表按助手隔离。两者都可配置记忆间隔、历史检索阈值/条数及压缩阈值。
+- 跨会话记忆：每个用户、每个助手维护一份核心记忆，按配置轮次后台更新；管理页可查看、编辑、清空或手动提炼。
+- 历史会话 RAG：同助手消息经 OpenAI-compatible Embeddings 建立索引；仅在模型主动调用工具时执行语义检索，并排除当前会话。
+- 自动标题：首轮用户与助手消息完成后，由独立轻量模型生成标题，不再截取用户原文作为会话名。
 - 邮件子代理：主代理委派后，子代理仅可查询 SQLite 中的收件人并调用 SMTP 发送，不再直接访问 MongoDB 或通用查询工具。
 - 前端体验：流式正文/推理摘要、按时间线交错的工具事件、模型头像、个人头像与本地偏好恢复。
 
@@ -87,6 +99,8 @@ AgentBI/
 2. Playground / Live：复用会话 DAG、角色与提示词模块化能力，分别承载 RP 场景和实时语音模型。
 3. 本地优先同步：保留 `SqliteChatRepository` 作为接口边界；需要云同步时实现新的 repository，而不是让 API 层直接耦合数据库。
 4. 生产化：加密 provider key、认证与权限、审计、模型调用限流、后台任务与备份/迁移。
+
+后台能力采用“缺少路由即跳过”的降级方式：未配置向量/压缩/记忆/标题模型不会影响聊天模型正常回复。
 
 ## 7. 本地运行与验证
 

@@ -31,8 +31,35 @@ export interface AssistantProfile {
   capability_ids: string[]
   avatar_data_url?: string | null
   include_runtime_context: boolean
+  memory_enabled: boolean
+  memory_update_interval: number
+  history_search_enabled: boolean
+  history_similarity_threshold: number
+  history_result_limit: number
+  context_strategy: 'window' | 'compression'
+  compression_threshold_turns: number
+  compression_threshold_tokens: number
+  compression_keep_recent_turns: number
   is_default: boolean
   created_at?: string
+  updated_at?: string
+}
+
+export interface AssistantMemory {
+  assistant_id: string
+  user_id: string
+  summary: string
+  last_summarized_message_id?: string | null
+  updated_at?: string | null
+}
+
+export type ModelRouteRole = 'embedding' | 'compression' | 'memory' | 'title'
+
+export interface ModelRoute {
+  user_id: string
+  role: ModelRouteRole
+  provider_id: string
+  model: string
   updated_at?: string
 }
 

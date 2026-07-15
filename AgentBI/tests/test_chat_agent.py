@@ -51,6 +51,50 @@ class ChatAgentTests(unittest.TestCase):
         self.assertNotIn("runtime_context", messages[0]["content"])
         self.assertEqual(messages[1]["content"], "hello")
 
+    def test_history_search_tool_is_exposed_only_when_enabled(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        disabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions([], False)}
+        enabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions([], True)}
+
+        self.assertEqual(disabled, set())
+        self.assertEqual(enabled, {"search_assistant_history"})
+
+    def test_memory_and_compressed_context_are_separate_system_sections(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        messages = ChatAgent(
+            "answer tersely",
+            [],
+            include_runtime_context=False,
+            memory_summary="the user prefers Chinese",
+            context_summary="we already selected SQLite",
+        ).build_request_messages([{"role": "user", "content": "continue"}], {})
+
+        self.assertIn("<assistant_memory>", messages[0]["content"])
+        self.assertIn("the user prefers Chinese", messages[0]["content"])
+        self.assertIn("<conversation_summary>", messages[0]["content"])
+        self.assertIn("we already selected SQLite", messages[0]["content"])
+
+
+class ChatAgentHistoryFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_history_provider_failure_does_not_abort_the_main_chat(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        class FailingMemoryService:
+            async def search_history(self, *args, **kwargs):
+                raise RuntimeError("batch size is invalid")
+
+        result = await ChatAgent(
+            capability_ids=[],
+            memory_service=FailingMemoryService(),
+            user_id="user",
+            assistant={"_id": "assistant", "history_search_enabled": True},
+        )._search_history('{"query":"previous decision"}')
+
+        self.assertIn("历史会话检索失败", result)
+        self.assertIn("batch size is invalid", result)
+
 
 if __name__ == "__main__":
     unittest.main()

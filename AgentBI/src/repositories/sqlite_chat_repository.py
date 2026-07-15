@@ -58,6 +58,12 @@ class SqliteChatRepository:
                     id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, system_prompt TEXT NOT NULL,
                     capability_ids TEXT NOT NULL DEFAULT '[]', avatar_data_url TEXT,
                     include_runtime_context INTEGER NOT NULL DEFAULT 1, is_default INTEGER NOT NULL DEFAULT 0,
+                    memory_enabled INTEGER NOT NULL DEFAULT 0, memory_update_interval INTEGER NOT NULL DEFAULT 12,
+                    history_search_enabled INTEGER NOT NULL DEFAULT 0, history_similarity_threshold REAL NOT NULL DEFAULT 0.58,
+                    history_result_limit INTEGER NOT NULL DEFAULT 3, context_strategy TEXT NOT NULL DEFAULT 'window',
+                    compression_threshold_turns INTEGER NOT NULL DEFAULT 12,
+                    compression_threshold_tokens INTEGER NOT NULL DEFAULT 8000,
+                    compression_keep_recent_turns INTEGER NOT NULL DEFAULT 4,
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS assistants_one_default_per_user
@@ -67,6 +73,7 @@ class SqliteChatRepository:
                     model TEXT, temperature REAL NOT NULL, context_turns INTEGER NOT NULL,
                     assistant_id TEXT, active_message_id TEXT, root_message_id TEXT,
                     source_thread_id TEXT, source_message_id TEXT,
+                    context_summary TEXT, context_summary_until_message_id TEXT,
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_message_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -87,8 +94,47 @@ class SqliteChatRepository:
                 CREATE INDEX IF NOT EXISTS thread_message_parent ON chat_messages(thread_id, parent_id, created_at);
                 CREATE INDEX IF NOT EXISTS thread_message_siblings ON chat_messages(thread_id, sibling_group_id, created_at);
                 CREATE UNIQUE INDEX IF NOT EXISTS runs_by_message ON chat_runs(thread_id, message_id);
+                CREATE TABLE IF NOT EXISTS model_routes (
+                    user_id TEXT NOT NULL, role TEXT NOT NULL, provider_id TEXT NOT NULL, model TEXT NOT NULL,
+                    updated_at TEXT NOT NULL, PRIMARY KEY(user_id, role)
+                );
+                CREATE TABLE IF NOT EXISTS assistant_memories (
+                    user_id TEXT NOT NULL, assistant_id TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '',
+                    last_summarized_message_id TEXT, updated_at TEXT NOT NULL,
+                    PRIMARY KEY(user_id, assistant_id)
+                );
+                CREATE TABLE IF NOT EXISTS message_embeddings (
+                    message_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, assistant_id TEXT NOT NULL,
+                    model_key TEXT NOT NULL, vector TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS embeddings_by_assistant
+                    ON message_embeddings(user_id, assistant_id, model_key);
                 """
             )
+            assistant_columns = {
+                "memory_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "memory_update_interval": "INTEGER NOT NULL DEFAULT 12",
+                "history_search_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "history_similarity_threshold": "REAL NOT NULL DEFAULT 0.58",
+                "history_result_limit": "INTEGER NOT NULL DEFAULT 3",
+                "context_strategy": "TEXT NOT NULL DEFAULT 'window'",
+                "compression_threshold_turns": "INTEGER NOT NULL DEFAULT 12",
+                "compression_threshold_tokens": "INTEGER NOT NULL DEFAULT 8000",
+                "compression_keep_recent_turns": "INTEGER NOT NULL DEFAULT 4",
+            }
+            thread_columns = {
+                "context_summary": "TEXT",
+                "context_summary_until_message_id": "TEXT",
+            }
+            for name, definition in assistant_columns.items():
+                self._ensure_column("assistants", name, definition)
+            for name, definition in thread_columns.items():
+                self._ensure_column("chat_threads", name, definition)
+
+    def _ensure_column(self, table: str, name: str, definition: str) -> None:
+        columns = {row[1] for row in self._connection.execute(f"PRAGMA table_info({table})")}
+        if name not in columns:
+            self._connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
     @staticmethod
     def _json_dump(value: Any) -> str:
@@ -139,6 +185,8 @@ class SqliteChatRepository:
         item["capability_ids"] = self._json_load(item.pop("capability_ids"), [])
         item["include_runtime_context"] = bool(item["include_runtime_context"])
         item["is_default"] = bool(item["is_default"])
+        item["memory_enabled"] = bool(item.get("memory_enabled"))
+        item["history_search_enabled"] = bool(item.get("history_search_enabled"))
         item["created_at"] = self._parse_time(item["created_at"])
         item["updated_at"] = self._parse_time(item["updated_at"])
         return item
@@ -228,6 +276,30 @@ class SqliteChatRepository:
                 (user_id, values.get("provider_id"), values.get("model"), values["temperature"], values["context_turns"], now, now),
             )
         return self.get_preferences(user_id)
+
+    def save_model_route(self, user_id: str, role: str, fields: dict[str, Any]) -> dict[str, Any]:
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO model_routes(user_id, role, provider_id, model, updated_at) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, role) DO UPDATE SET provider_id=excluded.provider_id,
+                model=excluded.model, updated_at=excluded.updated_at""",
+                (user_id, role, fields["provider_id"], fields["model"], now),
+            )
+        return self.get_model_route(user_id, role)  # type: ignore[return-value]
+
+    def get_model_route(self, user_id: str, role: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._one("SELECT * FROM model_routes WHERE user_id = ? AND role = ?", (user_id, role))
+        return dict(row) if row else None
+
+    def list_model_routes(self, user_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(row) for row in self._all("SELECT * FROM model_routes WHERE user_id = ? ORDER BY role", (user_id,))]
+
+    def delete_model_route(self, user_id: str, role: str) -> bool:
+        with self._lock, self._connection:
+            return bool(self._connection.execute("DELETE FROM model_routes WHERE user_id = ? AND role = ?", (user_id, role)).rowcount)
 
     def find_user(self, identity: str) -> dict[str, Any] | None:
         with self._lock:
@@ -322,18 +394,36 @@ class SqliteChatRepository:
         assistant_id, now = self._id(), self._time()
         with self._lock, self._connection:
             self._connection.execute(
-                """INSERT INTO assistants VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+                """INSERT INTO assistants(
+                    id, user_id, name, system_prompt, capability_ids, avatar_data_url,
+                    include_runtime_context, is_default, memory_enabled, memory_update_interval,
+                    history_search_enabled, history_similarity_threshold, history_result_limit,
+                    context_strategy, compression_threshold_turns, compression_threshold_tokens,
+                    compression_keep_recent_turns, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (assistant_id, payload["user_id"], payload["name"], payload.get("system_prompt", ""),
                  self._json_dump(payload.get("capability_ids", [])), payload.get("avatar_data_url"),
-                 int(payload.get("include_runtime_context", True)), now, now),
+                 int(payload.get("include_runtime_context", True)), int(payload.get("memory_enabled", False)),
+                 payload.get("memory_update_interval", 12), int(payload.get("history_search_enabled", False)),
+                 payload.get("history_similarity_threshold", 0.58), payload.get("history_result_limit", 3),
+                 payload.get("context_strategy", "window"), payload.get("compression_threshold_turns", 12),
+                 payload.get("compression_threshold_tokens", 8000), payload.get("compression_keep_recent_turns", 4),
+                 now, now),
             )
         return self.get_assistant(assistant_id, payload["user_id"])  # type: ignore[return-value]
 
     def update_assistant(self, assistant_id: str, user_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
         assistant = self.get_assistant(assistant_id, user_id)
-        if not assistant or assistant["is_default"]:
+        if not assistant:
             return None
-        allowed = {"name", "system_prompt", "capability_ids", "avatar_data_url", "include_runtime_context"}
+        policy_fields = {
+            "memory_enabled", "memory_update_interval", "history_search_enabled",
+            "history_similarity_threshold", "history_result_limit", "context_strategy",
+            "compression_threshold_turns", "compression_threshold_tokens", "compression_keep_recent_turns",
+        }
+        allowed = policy_fields if assistant["is_default"] else {
+            "name", "system_prompt", "capability_ids", "avatar_data_url", "include_runtime_context", *policy_fields
+        }
         values = {key: value for key, value in fields.items() if key in allowed}
         if values:
             assignments, params = [], []
@@ -341,7 +431,7 @@ class SqliteChatRepository:
                 assignments.append(f"{key} = ?")
                 if key == "capability_ids":
                     value = self._json_dump(value)
-                if key == "include_runtime_context":
+                if key in {"include_runtime_context", "memory_enabled", "history_search_enabled"}:
                     value = int(bool(value))
                 params.append(value)
             params.extend([self._time(), assistant_id, user_id])
@@ -360,11 +450,39 @@ class SqliteChatRepository:
         with self._lock, self._connection:
             return bool(self._connection.execute("DELETE FROM assistants WHERE id = ? AND user_id = ?", (assistant_id, user_id)).rowcount)
 
+    def get_assistant_memory(self, user_id: str, assistant_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._one("SELECT * FROM assistant_memories WHERE user_id = ? AND assistant_id = ?", (user_id, assistant_id))
+        return dict(row) if row else {
+            "user_id": user_id, "assistant_id": assistant_id, "summary": "",
+            "last_summarized_message_id": None, "updated_at": None,
+        }
+
+    def save_assistant_memory(self, user_id: str, assistant_id: str, summary: str, last_message_id: str | None = None) -> dict[str, Any]:
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO assistant_memories(user_id, assistant_id, summary, last_summarized_message_id, updated_at)
+                VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, assistant_id) DO UPDATE SET
+                summary=excluded.summary, last_summarized_message_id=excluded.last_summarized_message_id,
+                updated_at=excluded.updated_at""",
+                (user_id, assistant_id, summary, last_message_id, now),
+            )
+        return self.get_assistant_memory(user_id, assistant_id)
+
+    def clear_assistant_memory(self, user_id: str, assistant_id: str) -> bool:
+        with self._lock, self._connection:
+            return bool(self._connection.execute("DELETE FROM assistant_memories WHERE user_id = ? AND assistant_id = ?", (user_id, assistant_id)).rowcount)
+
     def create_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
         thread_id, root_id, now = self._id(), self._id(), self._time()
         with self._lock, self._connection:
             self._connection.execute(
-                """INSERT INTO chat_threads VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO chat_threads(
+                    id, user_id, title, provider_id, model, temperature, context_turns, assistant_id,
+                    active_message_id, root_message_id, source_thread_id, source_message_id,
+                    context_summary, context_summary_until_message_id, created_at, updated_at, last_message_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?)""",
                 (thread_id, payload["user_id"], payload["title"], payload.get("provider_id"), payload.get("model"),
                  payload.get("temperature", 0.7), payload.get("context_turns", 8), payload.get("assistant_id"), root_id,
                  payload.get("source_thread_id"), payload.get("source_message_id"), now, now, now),
@@ -388,7 +506,7 @@ class SqliteChatRepository:
             return self._thread_document(self._one("SELECT * FROM chat_threads WHERE id = ? AND user_id = ?", (conversation_id, user_id)))
 
     def update_conversation(self, conversation_id: str, user_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
-        allowed = {"title", "provider_id", "model", "temperature", "context_turns", "assistant_id", "active_message_id"}
+        allowed = {"title", "provider_id", "model", "temperature", "context_turns", "assistant_id", "active_message_id", "context_summary", "context_summary_until_message_id"}
         values = {key: value for key, value in fields.items() if key in allowed}
         if values:
             assignments = [f"{key} = ?" for key in values]
@@ -396,6 +514,12 @@ class SqliteChatRepository:
             with self._lock, self._connection:
                 self._connection.execute(f"UPDATE chat_threads SET {', '.join(assignments)}, updated_at = ? WHERE id = ? AND user_id = ?", tuple(params))
         return self.get_conversation(conversation_id, user_id)
+
+    def save_context_summary(self, conversation_id: str, user_id: str, summary: str, until_message_id: str | None) -> dict[str, Any] | None:
+        return self.update_conversation(conversation_id, user_id, {
+            "context_summary": summary,
+            "context_summary_until_message_id": until_message_id,
+        })
 
     def delete_conversation(self, conversation_id: str, user_id: str) -> bool:
         with self._lock, self._connection:
@@ -573,6 +697,43 @@ class SqliteChatRepository:
             item["sibling_index"] = ids.index(message["_id"]) if message["_id"] in ids else 0
             result.append(item)
         return result
+
+    def save_message_embedding(self, message_id: str, user_id: str, assistant_id: str, model_key: str, vector: list[float]) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO message_embeddings(message_id, user_id, assistant_id, model_key, vector, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(message_id) DO UPDATE SET
+                user_id=excluded.user_id, assistant_id=excluded.assistant_id,
+                model_key=excluded.model_key, vector=excluded.vector, updated_at=excluded.updated_at""",
+                (message_id, user_id, assistant_id, model_key, self._json_dump(vector), self._time()),
+            )
+
+    def list_message_embeddings(self, user_id: str, assistant_id: str, model_key: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._all(
+                """SELECT e.*, m.content, m.role, m.thread_id, m.created_at
+                FROM message_embeddings e JOIN chat_messages m ON m.id = e.message_id
+                WHERE e.user_id = ? AND e.assistant_id = ? AND e.model_key = ? AND m.status = 'complete'
+                ORDER BY m.created_at DESC""",
+                (user_id, assistant_id, model_key),
+            )
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["vector"] = self._json_load(item["vector"], [])
+            item["conversation_id"] = item["thread_id"]
+            result.append(item)
+        return result
+
+    def list_assistant_messages(self, user_id: str, assistant_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._all(
+                """SELECT m.* FROM chat_messages m JOIN chat_threads t ON t.id = m.thread_id
+                WHERE m.user_id = ? AND t.assistant_id = ? AND m.role IN ('user', 'assistant')
+                AND m.status = 'complete' ORDER BY m.created_at ASC""",
+                (user_id, assistant_id),
+            )
+        return [self._message_document(row) for row in rows]  # type: ignore[list-item]
 
     def create_branch_conversation(self, conversation_id: str, user_id: str, source_message_id: str, title: str | None = None) -> dict[str, Any] | None:
         source_thread = self.get_conversation(conversation_id, user_id)

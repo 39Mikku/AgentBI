@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
@@ -10,7 +11,8 @@ from AgentBI.src.agents.chat_agent import ChatAgent
 from AgentBI.src.api.dependencies import get_chat_repository
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.schemas.chat_schema import ChatEditStreamRequest, ChatRetryStreamRequest, ChatStreamRequest
-from AgentBI.src.services.chat_service import ChatService, append_timeline_event, encode_sse_event, format_model_error
+from AgentBI.src.services.chat_service import append_timeline_event, encode_sse_event, format_model_error
+from AgentBI.src.services.memory_service import MemoryService, build_context_bundle
 
 router = APIRouter(tags=["chat"])
 logger = Logger.get_logger(__name__)
@@ -106,6 +108,9 @@ def stream_assistant(
     runtime_context: dict[str, str],
     conversation_title: str,
     assistant: dict[str, Any],
+    memory_service: MemoryService,
+    memory_summary: str | None = None,
+    context_summary: str | None = None,
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -122,6 +127,12 @@ def stream_assistant(
                 assistant.get("capability_ids", []),
                 assistant.get("include_runtime_context", True),
                 repository,
+                memory_service,
+                assistant_message["user_id"],
+                assistant,
+                memory_summary,
+                context_summary,
+                conversation_id,
             ).stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
@@ -144,6 +155,18 @@ def stream_assistant(
                 timeline=timeline,
             )
             yield encode_sse_event("done", {"message_id": str(message["_id"]), "conversation_id": conversation_id})
+            latest_thread = repository.get_conversation(conversation_id, assistant_message["user_id"])
+            if latest_thread:
+                try:
+                    title = await memory_service.generate_title(latest_thread)
+                    if title:
+                        yield encode_sse_event(
+                            "conversation_title_updated",
+                            {"conversation_id": conversation_id, "title": title},
+                        )
+                except Exception:
+                    logger.exception("会话标题生成失败: conversation_id=%s", conversation_id)
+                asyncio.create_task(_maintain_after_reply(memory_service, latest_thread, assistant))
         except Exception as error:
             message = format_model_error(error)
             logger.exception("模型流式调用失败: provider=%s model=%s", provider.get("name"), model)
@@ -156,6 +179,17 @@ def stream_assistant(
     return event_stream()
 
 
+async def _maintain_after_reply(
+    memory_service: MemoryService,
+    thread: dict[str, Any],
+    assistant: dict[str, Any],
+) -> None:
+    try:
+        await memory_service.maintain_after_reply(thread, assistant)
+    except Exception:
+        logger.exception("助手后台记忆维护失败: conversation_id=%s", thread.get("_id"))
+
+
 @router.post("/chat/stream")
 async def stream_chat(request: Request, payload: ChatStreamRequest):
     repository = get_chat_repository(request)
@@ -163,13 +197,9 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
     user_message = repository.create_user_message(payload.conversation_id, payload.user_id, payload.content)
     if not user_message:
         raise HTTPException(status_code=404, detail="无法创建用户消息")
-    if not thread.get("title") or thread["title"] == "未命名会话":
-        thread = repository.update_conversation(
-            payload.conversation_id,
-            payload.user_id,
-            {"title": payload.content[:36]},
-        ) or thread
-    context = ChatService(repository).build_context(payload.conversation_id, payload.user_id, context_turns)
+    memory_service = MemoryService(repository)
+    bundle = memory_service.context_bundle(thread, assistant, context_turns)
+    context = bundle["messages"]
     assistant_message = repository.create_assistant_message(
         payload.conversation_id,
         payload.user_id,
@@ -190,6 +220,9 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             build_runtime_context(payload),
             thread.get("title", ""),
             assistant,
+            memory_service,
+            memory_service.core_memory(payload.user_id, assistant),
+            bundle["summary"],
         ),
         media_type="text/event-stream",
     )
@@ -203,12 +236,16 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
     source = source_path[-1] if source_path else None
     if not source or source.get("role") != "assistant" or not source.get("parent_id"):
         raise HTTPException(status_code=404, detail="助手消息不存在")
-    context = ChatService(repository).build_context_to_message(
-        payload.conversation_id,
-        payload.user_id,
-        str(source["parent_id"]),
+    memory_service = MemoryService(repository)
+    bundle = build_context_bundle(
+        source_path[:-1],
         context_turns,
+        assistant.get("context_strategy", "window"),
+        thread.get("context_summary"),
+        thread.get("context_summary_until_message_id"),
+        assistant.get("compression_keep_recent_turns", 4),
     )
+    context = bundle["messages"]
     assistant_message = repository.retry_assistant_message(
         payload.conversation_id,
         payload.user_id,
@@ -229,6 +266,9 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             build_runtime_context(payload),
             thread.get("title", ""),
             assistant,
+            memory_service,
+            memory_service.core_memory(payload.user_id, assistant),
+            bundle["summary"],
         ),
         media_type="text/event-stream",
     )
@@ -241,7 +281,9 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
     user_message = repository.edit_user_message(payload.conversation_id, payload.user_id, payload.message_id, payload.content)
     if not user_message:
         raise HTTPException(status_code=404, detail="用户消息不存在")
-    context = ChatService(repository).build_context(payload.conversation_id, payload.user_id, context_turns)
+    memory_service = MemoryService(repository)
+    bundle = memory_service.context_bundle(thread, assistant, context_turns)
+    context = bundle["messages"]
     assistant_message = repository.create_assistant_message(
         payload.conversation_id,
         payload.user_id,
@@ -262,6 +304,9 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             build_runtime_context(payload),
             thread.get("title", ""),
             assistant,
+            memory_service,
+            memory_service.core_memory(payload.user_id, assistant),
+            bundle["summary"],
         ),
         media_type="text/event-stream",
     )

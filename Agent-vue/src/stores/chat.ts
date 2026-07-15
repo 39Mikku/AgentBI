@@ -135,7 +135,7 @@ export const useChatStore = defineStore('chat', () => {
       await nextTick()
       const conversation = await api.createConversation({
         user_id: userId,
-        title: '未命名会话',
+        title: '新对话',
         temperature: preferences.value.temperature,
         context_turns: preferences.value.contextTurns,
         provider_id: preferences.value.providerId,
@@ -315,6 +315,12 @@ export const useChatStore = defineStore('chat', () => {
       error.value = event.data.message || '生成失败'
     }
     if (event.event === 'done') temporary.status = 'complete'
+    if (event.event === 'conversation_title_updated') {
+      const conversation = conversations.value.find(
+        (item) => item.id === (event.data.conversation_id || activeId.value),
+      )
+      if (conversation && event.data.title) conversation.title = event.data.title
+    }
   }
 
   async function runGeneration(

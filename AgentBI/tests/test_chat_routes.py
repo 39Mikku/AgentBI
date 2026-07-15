@@ -7,11 +7,15 @@ class ChatRouteTests(unittest.TestCase):
         from AgentBI.src.api.conversations import router as conversation_router
         from AgentBI.src.api.providers import router as provider_router
         from AgentBI.src.api.user_profile import router as user_profile_router
+        from AgentBI.src.api.assistants import router as assistant_router
+        from AgentBI.src.api.model_routes import router as model_route_router
 
         chat_paths = {route.path for route in chat_router.routes}
         conversation_paths = {route.path for route in conversation_router.routes}
         provider_paths = {route.path for route in provider_router.routes}
         user_profile_paths = {route.path for route in user_profile_router.routes}
+        assistant_paths = {route.path for route in assistant_router.routes}
+        model_route_paths = {route.path for route in model_route_router.routes}
 
         self.assertIn("/chat/stream", chat_paths)
         self.assertIn("/conversations", conversation_paths)
@@ -23,6 +27,9 @@ class ChatRouteTests(unittest.TestCase):
         self.assertIn("/providers", provider_paths)
         self.assertIn("/user-profile", user_profile_paths)
         self.assertIn("/user-profile/avatar", user_profile_paths)
+        self.assertIn("/assistants/{assistant_id}/memory", assistant_paths)
+        self.assertIn("/assistants/{assistant_id}/memory/refresh", assistant_paths)
+        self.assertIn("/model-routes/{role}", model_route_paths)
 
 
 if __name__ == "__main__":

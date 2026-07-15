@@ -12,12 +12,24 @@ const assistants = ref<AssistantProfile[]>([])
 const selectedId = ref('')
 const busy = ref(false)
 const error = ref('')
+const memoryText = ref('')
+const memoryUpdatedAt = ref<string | null>(null)
+const memoryBusy = ref('')
 const form = ref({
   name: '',
   system_prompt: '',
   capability_ids: [] as string[],
   avatar_data_url: null as string | null,
   include_runtime_context: true,
+  memory_enabled: false,
+  memory_update_interval: 12,
+  history_search_enabled: false,
+  history_similarity_threshold: 0.58,
+  history_result_limit: 3,
+  context_strategy: 'window' as 'window' | 'compression',
+  compression_threshold_turns: 12,
+  compression_threshold_tokens: 8000,
+  compression_keep_recent_turns: 4,
 })
 const selected = computed(
   () => assistants.value.find((assistant) => assistant.id === selectedId.value) || null,
@@ -32,7 +44,18 @@ function resetForm() {
     capability_ids: [],
     avatar_data_url: null,
     include_runtime_context: true,
+    memory_enabled: false,
+    memory_update_interval: 12,
+    history_search_enabled: false,
+    history_similarity_threshold: 0.58,
+    history_result_limit: 3,
+    context_strategy: 'window',
+    compression_threshold_turns: 12,
+    compression_threshold_tokens: 8000,
+    compression_keep_recent_turns: 4,
   }
+  memoryText.value = ''
+  memoryUpdatedAt.value = null
 }
 function edit(assistant: AssistantProfile) {
   selectedId.value = assistant.id
@@ -42,26 +65,88 @@ function edit(assistant: AssistantProfile) {
     capability_ids: [...assistant.capability_ids],
     avatar_data_url: assistant.avatar_data_url || null,
     include_runtime_context: assistant.include_runtime_context,
+    memory_enabled: assistant.memory_enabled,
+    memory_update_interval: assistant.memory_update_interval,
+    history_search_enabled: assistant.history_search_enabled,
+    history_similarity_threshold: assistant.history_similarity_threshold,
+    history_result_limit: assistant.history_result_limit,
+    context_strategy: assistant.context_strategy,
+    compression_threshold_turns: assistant.compression_threshold_turns,
+    compression_threshold_tokens: assistant.compression_threshold_tokens,
+    compression_keep_recent_turns: assistant.compression_keep_recent_turns,
   }
+  void loadMemory(assistant.id)
 }
 async function load() {
   assistants.value = await api.listAssistants(userId.value)
 }
 async function save() {
-  if (!form.value.name.trim() || isDefault.value) return
+  if (!form.value.name.trim()) return
   busy.value = true
   error.value = ''
   try {
     const payload = { ...form.value, name: form.value.name.trim(), user_id: userId.value }
-    if (selectedId.value) await api.updateAssistant(selectedId.value, userId.value, payload)
+    const policy = {
+      memory_enabled: form.value.memory_enabled,
+      memory_update_interval: form.value.memory_update_interval,
+      history_search_enabled: form.value.history_search_enabled,
+      history_similarity_threshold: form.value.history_similarity_threshold,
+      history_result_limit: form.value.history_result_limit,
+      context_strategy: form.value.context_strategy,
+      compression_threshold_turns: form.value.compression_threshold_turns,
+      compression_threshold_tokens: form.value.compression_threshold_tokens,
+      compression_keep_recent_turns: form.value.compression_keep_recent_turns,
+    }
+    if (selectedId.value)
+      await api.updateAssistant(selectedId.value, userId.value, isDefault.value ? policy : payload)
     else await api.createAssistant(payload)
+    const savedId = selectedId.value
     await load()
-    resetForm()
+    const saved = assistants.value.find((item) => item.id === savedId)
+    if (saved) edit(saved)
+    else resetForm()
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : '保存失败'
   } finally {
     busy.value = false
   }
+}
+async function loadMemory(assistantId: string) {
+  try {
+    const memory = await api.getAssistantMemory(assistantId, userId.value)
+    if (selectedId.value !== assistantId) return
+    memoryText.value = memory.summary
+    memoryUpdatedAt.value = memory.updated_at || null
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : '记忆加载失败'
+  }
+}
+async function saveMemory() {
+  if (!selectedId.value) return
+  memoryBusy.value = 'save'
+  try {
+    const memory = await api.saveAssistantMemory(selectedId.value, userId.value, memoryText.value)
+    memoryUpdatedAt.value = memory.updated_at || null
+  } finally { memoryBusy.value = '' }
+}
+async function refreshMemory() {
+  if (!selectedId.value) return
+  memoryBusy.value = 'refresh'
+  try {
+    const memory = await api.refreshAssistantMemory(selectedId.value, userId.value)
+    memoryText.value = memory.summary
+    memoryUpdatedAt.value = memory.updated_at || null
+  } catch (reason) { error.value = reason instanceof Error ? reason.message : '记忆更新失败' }
+  finally { memoryBusy.value = '' }
+}
+async function clearMemory() {
+  if (!selectedId.value) return
+  memoryBusy.value = 'clear'
+  try {
+    await api.clearAssistantMemory(selectedId.value, userId.value)
+    memoryText.value = ''
+    memoryUpdatedAt.value = null
+  } finally { memoryBusy.value = '' }
 }
 async function remove(assistant: AssistantProfile) {
   if (assistant.is_default) return
@@ -137,63 +222,59 @@ onMounted(() => {
             删除
           </button>
         </div>
-        <template v-if="isDefault"
-          ><div class="default-note">
-            默认助手已挂载全部能力，基础提示词不在此处编辑。
-          </div></template
-        ><template v-else
-          ><label
-            >名称<input v-model="form.name" maxlength="80" placeholder="例如：项目策划师" /></label
-          ><label
-            >系统提示词<textarea
-              v-model="form.system_prompt"
-              rows="8"
-              placeholder="定义这个助手的角色、边界与工作方式…"
-            />
-          </label>
+        <div v-if="isDefault" class="default-note">
+          默认助手始终挂载全部基础能力，提示词保持内置；记忆与上下文策略仍可独立调整。
+        </div>
+        <template v-else>
+          <label>名称<input v-model="form.name" maxlength="80" placeholder="例如：项目策划师" /></label>
+          <label>系统提示词<textarea v-model="form.system_prompt" rows="8" placeholder="定义这个助手的角色、边界与工作方式…" /></label>
           <fieldset>
             <legend>挂载能力</legend>
-            <label class="check"
-              ><input v-model="form.capability_ids" type="checkbox" value="agent.email" />邮件子代理
-              <small>撰写邮件、查询联系人并发送</small></label
-            >
+            <label class="check"><input v-model="form.capability_ids" type="checkbox" value="agent.email" />邮件子代理<small>撰写邮件、查询联系人并发送</small></label>
           </fieldset>
-          <label class="check"
-            ><input v-model="form.include_runtime_context" type="checkbox" />注入运行时环境
-            <small>向最新用户请求附加时间、时区、语言和用户名</small></label
-          >
+          <label class="check"><input v-model="form.include_runtime_context" type="checkbox" />注入运行时环境<small>向最新用户请求附加时间、时区、语言和用户名</small></label>
           <div class="avatar-field">
             <p>头像</p>
             <label class="avatar-upload-card">
-              <input
-                class="avatar-file"
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                @change="uploadAvatar"
-              />
+              <input class="avatar-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="uploadAvatar" />
               <img v-if="form.avatar_data_url" :src="form.avatar_data_url" alt="" />
-              <span v-else class="avatar-placeholder">{{
-                form.name.trim().slice(0, 2).toUpperCase() || 'AI'
-              }}</span>
-              <span class="avatar-upload-copy">
-                <strong>{{ form.avatar_data_url ? '更换头像' : '选择头像' }}</strong>
-                <small>PNG、JPG、WebP 或 GIF · 最大 1.4 MB</small>
-              </span>
+              <span v-else class="avatar-placeholder">{{ form.name.trim().slice(0, 2).toUpperCase() || 'AI' }}</span>
+              <span class="avatar-upload-copy"><strong>{{ form.avatar_data_url ? '更换头像' : '选择头像' }}</strong><small>PNG、JPG、WebP 或 GIF · 最大 1.4 MB</small></span>
               <i aria-hidden="true">↗</i>
             </label>
-            <button
-              v-if="form.avatar_data_url"
-              class="remove-avatar"
-              type="button"
-              @click="form.avatar_data_url = null"
-            >
-              移除头像
-            </button>
+            <button v-if="form.avatar_data_url" class="remove-avatar" type="button" @click="form.avatar_data_url = null">移除头像</button>
           </div>
-          <button class="save" :disabled="busy || !form.name.trim()">
-            {{ busy ? '保存中…' : '保存助手 →' }}
-          </button></template
-        >
+        </template>
+
+        <section class="policy-studio">
+          <div class="policy-title"><span>CONTEXT ENGINE</span><h3>记忆与上下文</h3><i>按助手生效</i></div>
+          <div class="policy-grid">
+            <label class="policy-switch"><input v-model="form.memory_enabled" type="checkbox" /><span><b>跨会话记忆</b><small>定期提炼稳定偏好与长期事实</small></span></label>
+            <label class="policy-switch"><input v-model="form.history_search_enabled" type="checkbox" /><span><b>历史语义检索</b><small>由主模型判断是否调用，不强制逐轮搜索</small></span></label>
+          </div>
+          <div v-if="form.memory_enabled" class="number-strip">
+            <label>记忆更新间隔<input v-model.number="form.memory_update_interval" type="number" min="2" max="100" /><span>轮</span></label>
+          </div>
+          <div v-if="form.history_search_enabled" class="tuning-grid">
+            <label>相似度阈值 <output>{{ form.history_similarity_threshold.toFixed(2) }}</output><input v-model.number="form.history_similarity_threshold" type="range" min="0" max="0.95" step="0.01" /></label>
+            <label>最多返回<input v-model.number="form.history_result_limit" type="number" min="1" max="10" /><span>条</span></label>
+          </div>
+
+          <div class="strategy-head"><div><b>上下文策略</b><small>原始消息始终保留，只改变发给模型的内容</small></div><div class="strategy-tabs"><label :class="{ active: form.context_strategy === 'window' }"><input v-model="form.context_strategy" type="radio" value="window" />滚动窗口</label><label :class="{ active: form.context_strategy === 'compression' }"><input v-model="form.context_strategy" type="radio" value="compression" />总结压缩</label></div></div>
+          <div v-if="form.context_strategy === 'compression'" class="compression-grid">
+            <label>触发轮次<input v-model.number="form.compression_threshold_turns" type="number" min="4" max="200" /></label>
+            <label>触发 Token<input v-model.number="form.compression_threshold_tokens" type="number" min="1000" max="500000" step="1000" /></label>
+            <label>保留最新轮次<input v-model.number="form.compression_keep_recent_turns" type="number" min="1" max="32" /></label>
+          </div>
+
+          <div v-if="selectedId" class="memory-ledger">
+            <div><b>当前核心记忆</b><small>{{ memoryUpdatedAt ? `更新于 ${new Date(memoryUpdatedAt).toLocaleString()}` : '尚未形成记忆' }}</small></div>
+            <textarea v-model="memoryText" rows="7" placeholder="这里会保存跨会话稳定记忆，也可由你直接编辑。" />
+            <div class="memory-actions"><button type="button" :disabled="Boolean(memoryBusy)" @click="saveMemory">保存文本</button><button type="button" :disabled="Boolean(memoryBusy) || !form.memory_enabled" @click="refreshMemory">{{ memoryBusy === 'refresh' ? '提炼中…' : '立即提炼' }}</button><button type="button" class="memory-clear" :disabled="Boolean(memoryBusy) || !memoryText" @click="clearMemory">清空</button></div>
+          </div>
+        </section>
+
+        <button class="save" :disabled="busy || !form.name.trim()">{{ busy ? '保存中…' : '保存助手与策略 →' }}</button>
       </form>
     </section>
   </main>
@@ -583,4 +664,5 @@ onMounted(() => {
     gap: 35px;
   }
 }
+.policy-studio{margin-top:30px;padding-top:24px;border-top:2px solid #171717}.policy-title{display:grid;grid-template-columns:1fr auto;align-items:end;margin-bottom:15px}.policy-title span{grid-column:1/-1;color:#747168;font:8px 'DM Mono';letter-spacing:.16em}.policy-title h3{margin:5px 0 0;font:700 19px Manrope;letter-spacing:-.04em}.policy-title i{color:#77736a;font:8px 'DM Mono';font-style:normal}.policy-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.editor .policy-switch{position:relative;display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center;margin:0;padding:13px;border:1px solid #b8b4ab;background:#f7f5ef;cursor:pointer}.policy-switch>input{appearance:none;width:28px;height:28px;margin:0;border:1px solid #171717;background:#e1ded6}.policy-switch>input:checked{background:#171717;box-shadow:inset 0 0 0 7px #d9ff36}.policy-switch span{display:grid;gap:3px}.policy-switch b{font:700 11px Manrope}.policy-switch small{color:#747067;font:8px/1.45 'DM Mono'}.number-strip,.tuning-grid,.compression-grid{display:grid;gap:8px;margin-top:8px}.tuning-grid{grid-template-columns:1.5fr .7fr}.compression-grid{grid-template-columns:repeat(3,1fr)}.number-strip label,.tuning-grid label,.compression-grid label{position:relative;margin:0;padding:11px 12px;border:1px solid #c4c0b7;background:#e6e3db;color:#5f5b53;font:8px 'DM Mono'}.number-strip input,.tuning-grid input[type=number],.compression-grid input{border:0!important;border-bottom:1px solid #8b877e!important;background:transparent!important;padding:6px 22px 3px 0!important;font:700 13px 'DM Mono'!important}.number-strip span,.tuning-grid label>span{position:absolute;right:13px;bottom:15px;color:#6d6961}.tuning-grid output{float:right;color:#171717;font-weight:700}.tuning-grid input[type=range]{width:100%;accent-color:#171717}.strategy-head{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-top:22px;padding-top:17px;border-top:1px solid #b8b4ab}.strategy-head>div:first-child{display:grid;gap:4px}.strategy-head b{font:700 11px Manrope}.strategy-head small{color:#757168;font:8px 'DM Mono'}.strategy-tabs{display:flex;border:1px solid #171717}.editor .strategy-tabs label{display:block;margin:0;padding:7px 10px;color:#514e48;font:8px 'DM Mono';cursor:pointer}.strategy-tabs label.active{background:#171717;color:#d9ff36}.strategy-tabs input{display:none}.memory-ledger{margin-top:22px;padding:15px;background:#171717;color:#efede6;box-shadow:5px 5px 0 #d9ff36}.memory-ledger>div:first-child{display:flex;justify-content:space-between;align-items:center}.memory-ledger b{font:700 11px Manrope}.memory-ledger small{color:#817e76;font:8px 'DM Mono'}.editor .memory-ledger textarea{margin-top:12px;border:1px solid #444;background:#202020;color:#e6e3dc;font:11px/1.7 'DM Mono';resize:vertical}.memory-actions{display:flex;gap:7px;margin-top:9px}.memory-actions button{border:1px solid #555;background:transparent;color:#d9ff36;padding:7px 9px;font:8px 'DM Mono';cursor:pointer}.memory-actions button:disabled{opacity:.35;cursor:not-allowed}.memory-actions .memory-clear{margin-left:auto;border-color:transparent;color:#8d8980}@media(max-width:760px){.policy-grid,.tuning-grid,.compression-grid{grid-template-columns:1fr}.strategy-head{align-items:flex-start;flex-direction:column}.memory-ledger>div:first-child{align-items:flex-start;flex-direction:column;gap:5px}}
 </style>

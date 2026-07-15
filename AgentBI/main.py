@@ -10,6 +10,7 @@ from AgentBI.src.api.chat import router as chat_router
 from AgentBI.src.api.conversations import router as conversation_router
 from AgentBI.src.api.providers import router as provider_router
 from AgentBI.src.api.user_profile import router as user_profile_router
+from AgentBI.src.api.model_routes import router as model_route_router
 from AgentBI.src.api.assistants import router as assistant_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
@@ -31,6 +32,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(router)
 app.include_router(provider_router)
 app.include_router(user_profile_router)
+app.include_router(model_route_router)
 app.include_router(assistant_router)
 app.include_router(conversation_router)
 app.include_router(chat_router)
