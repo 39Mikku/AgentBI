@@ -101,6 +101,15 @@ class SqliteChatRepository:
                     config_json TEXT NOT NULL DEFAULT '{}', updated_at TEXT NOT NULL,
                     PRIMARY KEY(user_id, capability_id)
                 );
+                CREATE TABLE IF NOT EXISTS toolbox_tts_voices (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, provider TEXT NOT NULL,
+                    display_name TEXT NOT NULL, external_voice_id TEXT NOT NULL,
+                    voice_kind TEXT NOT NULL, bound_model TEXT,
+                    provider_metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS toolbox_tts_voices_by_user_provider
+                    ON toolbox_tts_voices(user_id, provider, updated_at DESC);
                 CREATE TABLE IF NOT EXISTS users (
                     user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE,
                     avatar_data_url TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
@@ -1261,3 +1270,94 @@ class SqliteChatRepository:
         parent_id = thread.get("active_message_id") if thread else None
         message = self.create_assistant_message(conversation_id, user_id, parent_id or "") if parent_id else None
         return self.complete_assistant_message(message["_id"], content, **extra) if message else None
+
+    @staticmethod
+    def _toolbox_tts_voice_document(row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        item = dict(row)
+        try:
+            item["provider_metadata"] = json.loads(item.pop("provider_metadata_json"))
+        except (TypeError, ValueError):
+            item["provider_metadata"] = {}
+        return item
+
+    def list_toolbox_tts_voices(self, user_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._all(
+                "SELECT * FROM toolbox_tts_voices WHERE user_id = ? ORDER BY updated_at DESC",
+                (user_id,),
+            )
+        return [self._toolbox_tts_voice_document(row) for row in rows]  # type: ignore[list-item]
+
+    def get_toolbox_tts_voice(self, voice_id: str, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._one(
+                "SELECT * FROM toolbox_tts_voices WHERE id = ? AND user_id = ?",
+                (voice_id, user_id),
+            )
+        return self._toolbox_tts_voice_document(row)
+
+    def create_toolbox_tts_voice(self, payload: dict[str, Any]) -> dict[str, Any]:
+        voice_id = self._id()
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO toolbox_tts_voices(
+                    id, user_id, provider, display_name, external_voice_id, voice_kind,
+                    bound_model, provider_metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    voice_id,
+                    payload["user_id"],
+                    payload["provider"],
+                    payload["display_name"],
+                    payload["external_voice_id"],
+                    payload.get("voice_kind", "cloned"),
+                    payload.get("bound_model"),
+                    self._json_dump(payload.get("provider_metadata", {})),
+                    now,
+                    now,
+                ),
+            )
+        result = self.get_toolbox_tts_voice(voice_id, payload["user_id"])
+        if result is None:
+            raise RuntimeError("创建音色索引失败")
+        return result
+
+    def update_toolbox_tts_voice(
+        self,
+        voice_id: str,
+        user_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        current = self.get_toolbox_tts_voice(voice_id, user_id)
+        if current is None:
+            return None
+        assignments: list[str] = []
+        parameters: list[Any] = []
+        for key in ("display_name", "bound_model"):
+            if key in payload:
+                assignments.append(f"{key} = ?")
+                parameters.append(payload[key])
+        if "provider_metadata" in payload:
+            assignments.append("provider_metadata_json = ?")
+            parameters.append(self._json_dump(payload["provider_metadata"] or {}))
+        if not assignments:
+            return current
+        assignments.append("updated_at = ?")
+        parameters.extend((self._time(), voice_id, user_id))
+        with self._lock, self._connection:
+            self._connection.execute(
+                f"UPDATE toolbox_tts_voices SET {', '.join(assignments)} WHERE id = ? AND user_id = ?",
+                tuple(parameters),
+            )
+        return self.get_toolbox_tts_voice(voice_id, user_id)
+
+    def delete_toolbox_tts_voice(self, voice_id: str, user_id: str) -> bool:
+        with self._lock, self._connection:
+            cursor = self._connection.execute(
+                "DELETE FROM toolbox_tts_voices WHERE id = ? AND user_id = ?",
+                (voice_id, user_id),
+            )
+        return cursor.rowcount > 0

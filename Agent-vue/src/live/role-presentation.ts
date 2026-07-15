@@ -18,10 +18,28 @@ export function resolvedVoice(builtInVoice: string, customVoice: string): string
   return customVoice.trim() || builtInVoice
 }
 
-export function voiceLabel(voice: string): string {
-  return VOICE_NAMES[voice] || '自定义音色'
+function liveCatalogVoice(voice: string, catalog: TtsCustomVoice[]): TtsCustomVoice | undefined {
+  return catalog.find((item) =>
+    item.provider === 'bailian'
+    && item.external_voice_id === voice
+    && item.provider_metadata.usage === 'live',
+  )
+}
+
+export function voiceLabel(voice: string, catalog: TtsCustomVoice[] = []): string {
+  return VOICE_NAMES[voice] || liveCatalogVoice(voice, catalog)?.display_name || '自定义音色'
+}
+
+export function isLiveVoiceCompatible(
+  voice: string,
+  model: string,
+  catalog: TtsCustomVoice[],
+): boolean {
+  const saved = liveCatalogVoice(voice, catalog)
+  return !saved || saved.bound_model === model
 }
 
 export function hasRoleAvatar(avatar?: string | null): boolean {
   return Boolean(avatar?.trim())
 }
+import type { TtsCustomVoice } from '@/api/toolbox-tts-types'

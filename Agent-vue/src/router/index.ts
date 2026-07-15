@@ -35,6 +35,18 @@ const router = createRouter({
       meta: { title: 'Live · AgentBI', requiresAuth: true },
     },
     {
+      path: '/toolbox',
+      name: 'toolbox',
+      component: () => import('@/views/ToolboxView.vue'),
+      meta: { title: '工具箱 · AgentBI', requiresAuth: true },
+    },
+    {
+      path: '/toolbox/voice',
+      name: 'voice-workbench',
+      component: () => import('@/views/VoiceWorkbenchView.vue'),
+      meta: { title: 'Voice Lab · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/settings/models',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),

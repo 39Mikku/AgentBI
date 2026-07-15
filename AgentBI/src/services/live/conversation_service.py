@@ -117,6 +117,24 @@ class LiveConversationService:
     def __init__(self, repository: SqliteChatRepository):
         self.repository = repository
 
+    def _validate_registered_voice_model(
+        self,
+        user_id: str,
+        voice_id: str,
+        model: str,
+    ) -> None:
+        matching = [
+            voice
+            for voice in self.repository.list_toolbox_tts_voices(user_id)
+            if voice["provider"] == "bailian"
+            and voice["external_voice_id"] == voice_id
+            and (voice.get("provider_metadata") or {}).get("usage") == "live"
+        ]
+        if matching and not any(voice.get("bound_model") == model for voice in matching):
+            raise LiveWorkspaceError(
+                "Live voice is bound to another model; select a compatible voice"
+            )
+
     def prepare(
         self,
         user_id: str,
@@ -126,6 +144,12 @@ class LiveConversationService:
         role = self.repository.get_live_role(role_id, user_id)
         if not role:
             raise LiveWorkspaceError("Live role not found")
+        preferences = self.repository.get_live_preferences(user_id)
+        self._validate_registered_voice_model(
+            user_id,
+            role["voice"],
+            preferences["model"],
+        )
         conversation = (
             self.repository.get_live_conversation(conversation_id, user_id)
             if conversation_id
@@ -135,7 +159,6 @@ class LiveConversationService:
         )
         if not conversation or conversation["role_id"] != role_id:
             raise LiveWorkspaceError("Live conversation not found for role")
-        preferences = self.repository.get_live_preferences(user_id)
         replay = self.repository.list_live_replay_messages(
             conversation["id"],
             user_id,

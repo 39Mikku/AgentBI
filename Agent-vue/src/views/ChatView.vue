@@ -328,7 +328,7 @@ onMounted(async () => {
           ><b>›</b>
         </button>
         <button @click="router.push('/settings/models')">◈ 模型工作室</button>
-        <button @click="router.push('/settings/capabilities')">⌘ 能力配置</button>
+        <button @click="router.push('/toolbox')">⌘ 工具箱</button>
         <button @click="logout">↗ 退出会话</button>
       </div>
     </aside>

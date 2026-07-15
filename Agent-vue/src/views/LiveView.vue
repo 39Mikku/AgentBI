@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import type { LiveModelId } from '@/api/live-types'
+import { listTtsVoices } from '@/api/toolbox-tts'
+import type { TtsCustomVoice } from '@/api/toolbox-tts-types'
 import AppModeSwitcher from '@/components/AppModeSwitcher.vue'
 import LiveAvatarCore from '@/components/live/LiveAvatarCore.vue'
 import {
@@ -9,9 +11,10 @@ import {
   historyTurnsLabel,
   historyTurnsToSlider,
 } from '@/live/history-context'
-import { roleInitials, voiceLabel } from '@/live/role-presentation'
+import { isLiveVoiceCompatible, roleInitials, voiceLabel } from '@/live/role-presentation'
 import { useAuthStore } from '@/stores/auth'
 import { useLiveStore } from '@/stores/live'
+import { availableLiveVoices } from '@/toolbox/voice-workbench'
 
 const auth = useAuthStore()
 const live = useLiveStore()
@@ -33,6 +36,7 @@ const avatarInput = ref<HTMLInputElement | null>(null)
 const callDurationLabel = ref('00:00')
 const customVoice = ref('')
 const voiceMode = ref('builtin')
+const customVoices = ref<TtsCustomVoice[]>([])
 let durationTimer: ReturnType<typeof setInterval> | null = null
 let startedAt = 0
 
@@ -56,6 +60,21 @@ const voices = [
   { id: 'longanlufeng', label: '鹿风', code: 'LUFENG' },
 ]
 const builtInVoiceIds = new Set(voices.map((voice) => voice.id))
+const compatibleLiveVoices = computed(() =>
+  availableLiveVoices(live.preferences.model, customVoices.value),
+)
+const currentVoiceCompatible = computed(() =>
+  !live.currentRole
+  || isLiveVoiceCompatible(live.currentRole.voice, live.preferences.model, customVoices.value),
+)
+const draftVoiceCompatible = computed(() =>
+  voiceMode.value !== 'custom'
+  || isLiveVoiceCompatible(customVoice.value.trim(), live.preferences.model, customVoices.value),
+)
+const currentVoiceBinding = computed(() => customVoices.value.find((voice) =>
+  voice.external_voice_id === live.currentRole?.voice
+  && voice.provider_metadata.usage === 'live',
+))
 
 const historySlider = computed({
   get: () => historyTurnsToSlider(live.preferences.history_context_turns),
@@ -96,6 +115,7 @@ async function toggleCall() {
     stopDuration()
     return
   }
+  if (!currentVoiceCompatible.value) return
   startDuration()
   await live.startCall(userId.value)
   if (live.state.phase === 'error') stopDuration()
@@ -124,7 +144,7 @@ async function createRole() {
 async function saveRole() {
   if (!live.currentRole || !roleDraft.name.trim() || !roleDraft.instructions.trim()) return
   const voice = voiceMode.value === 'custom' ? customVoice.value.trim() : roleDraft.voice
-  if (!voice) return
+  if (!voice || !draftVoiceCompatible.value) return
   await live.persistRole(live.currentRole.id, {
     name: roleDraft.name.trim(),
     instructions: roleDraft.instructions.trim(),
@@ -196,7 +216,13 @@ watch(
   },
 )
 
-onMounted(() => live.loadWorkspace(userId.value))
+onMounted(async () => {
+  const [, voiceResult] = await Promise.allSettled([
+    live.loadWorkspace(userId.value),
+    listTtsVoices(userId.value),
+  ])
+  if (voiceResult.status === 'fulfilled') customVoices.value = voiceResult.value
+})
 onBeforeUnmount(() => {
   stopDuration()
   if (live.isActive) void live.endCall()
@@ -216,7 +242,7 @@ onBeforeUnmount(() => {
             <img v-if="live.currentRole?.avatar_data_url" :src="live.currentRole.avatar_data_url" alt="" />
             <i v-else>{{ roleInitials(roleName) }}</i>
           </span>
-          <span><strong>{{ roleName }}</strong><small>{{ voiceLabel(live.currentRole?.voice || '') }} · {{ modelTier }}</small></span>
+          <span><strong>{{ roleName }}</strong><small>{{ voiceLabel(live.currentRole?.voice || '', customVoices) }} · {{ modelTier }}</small></span>
           <b>⌄</b>
         </button>
         <Transition name="pop">
@@ -308,18 +334,19 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="call-dock">
-        <div class="dock-meta"><span>VOICE</span><strong>{{ voiceLabel(live.currentRole?.voice || '') }}</strong></div>
+        <div class="dock-meta"><span>VOICE</span><strong>{{ voiceLabel(live.currentRole?.voice || '', customVoices) }}</strong></div>
         <div class="call-controls">
           <button class="round-control" :class="{ active: live.muted }" :disabled="!live.isActive || live.state.phase === 'ending'" @click="live.toggleMute">
             <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm-7-3a7 7 0 0 0 14 0M12 18v3M8 21h8" /></svg><span>{{ live.muted ? '恢复' : '静音' }}</span>
           </button>
-          <button class="call-button" :class="{ active: live.isActive }" :disabled="live.state.phase === 'connecting' || live.state.phase === 'ending' || live.loading" @click="toggleCall">
+          <button class="call-button" :class="{ active: live.isActive }" :disabled="live.state.phase === 'connecting' || live.state.phase === 'ending' || live.loading || (!live.isActive && !currentVoiceCompatible)" @click="toggleCall">
             <span class="call-icon"><i></i></span><strong>{{ live.isActive ? '结束通话' : '开始通话' }}</strong><small>{{ live.isActive ? 'END SESSION' : 'OPEN CHANNEL' }}</small>
           </button>
           <button class="round-control" @click="openSettings('call')">
             <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M10 14v6" /></svg><span>配置</span>
           </button>
         </div>
+        <p v-if="!currentVoiceCompatible" class="dock-voice-warning">当前音色绑定 {{ currentVoiceBinding?.bound_model?.endsWith('plus') ? 'PLUS' : 'FLASH' }}，请切回对应模型或为角色更换音色。</p>
         <div class="dock-meta right"><span>CONTEXT</span><strong>{{ historyTurnsLabel(live.preferences.history_context_turns) }}</strong></div>
       </footer>
     </main>
@@ -383,7 +410,16 @@ onBeforeUnmount(() => {
                   <button v-for="voice in voices" :key="voice.id" :class="{ active: voiceMode === 'builtin' && roleDraft.voice === voice.id }" :disabled="!live.canEditSettings" @click="voiceMode = 'builtin'; roleDraft.voice = voice.id"><strong>{{ voice.label }}</strong><small>{{ voice.code }}</small></button>
                   <button :class="{ active: voiceMode === 'custom' }" :disabled="!live.canEditSettings" @click="voiceMode = 'custom'"><strong>自定义</strong><small>VOICE ID</small></button>
                 </div>
-                <input v-if="voiceMode === 'custom'" v-model="customVoice" class="text-input" maxlength="128" placeholder="输入复刻音色或自定义 voice id" :disabled="!live.canEditSettings" />
+                <div v-if="voiceMode === 'custom'" class="custom-voice-editor">
+                  <label><span>已同步的 {{ modelTier }} 音色</span></label>
+                  <select :value="compatibleLiveVoices.some((voice) => voice.value === customVoice) ? customVoice : ''" :disabled="!live.canEditSettings" @change="customVoice = ($event.target as HTMLSelectElement).value || customVoice">
+                    <option value="">选择音色名，或在下方手动输入</option>
+                    <option v-for="voice in compatibleLiveVoices" :key="voice.key" :value="voice.value">{{ voice.label }}</option>
+                  </select>
+                  <input v-model="customVoice" class="text-input" maxlength="256" placeholder="复刻音色或自定义 Voice ID" :disabled="!live.canEditSettings" />
+                  <p v-if="!compatibleLiveVoices.length">尚无适用于 {{ modelTier }} 的复刻音色，可前往工具箱 / Voice Lab 创建。</p>
+                  <p v-if="!draftVoiceCompatible" class="voice-binding-error">该已登记音色绑定了另一个实时模型，不能用于当前 {{ modelTier }}。</p>
+                </div>
               </section>
               <section class="deck-section prompt-section">
                 <label><span>03</span> 系统提示词 <b>{{ roleDraft.instructions.length }} / 12000</b></label>
@@ -395,7 +431,7 @@ onBeforeUnmount(() => {
               </section>
               <div class="role-actions">
                 <button v-if="live.currentRole && !live.currentRole.is_default" class="danger-action" :disabled="!live.canEditSettings" @click="deleteCurrentRole">删除角色</button>
-                <button class="primary-action" :disabled="!live.canEditSettings || !roleDraft.name.trim() || !roleDraft.instructions.trim() || (voiceMode === 'custom' && !customVoice.trim())" @click="saveRole">保存角色</button>
+                <button class="primary-action" :disabled="!live.canEditSettings || !roleDraft.name.trim() || !roleDraft.instructions.trim() || (voiceMode === 'custom' && (!customVoice.trim() || !draftVoiceCompatible))" @click="saveRole">保存角色</button>
               </div>
             </template>
 
@@ -448,4 +484,5 @@ button,input,textarea { font:inherit; } button { cursor:pointer; } button:disabl
 @keyframes spin { to { transform:rotate(360deg); } } @keyframes pulse { 50% { opacity:.35; } } @keyframes blink { 50% { opacity:0; } }
 @media (max-width:1050px) { .live-shell { grid-template-columns:250px minmax(0,1fr); }.console-body { grid-template-columns:1fr 340px; }.dock-meta { display:none; }.call-dock { grid-template-columns:1fr;justify-items:center; } }
 @media (max-width:820px) { .live-shell { grid-template-columns:1fr;height:auto;min-height:100dvh;overflow:auto; }.workspace-rail { min-height:auto; }.conversation-list { max-height:230px; }.live-console { min-height:900px; }.console-body { grid-template-columns:1fr;grid-template-rows:430px 430px; }.voice-stage { border-right:0;border-bottom:1px solid rgba(255,255,255,.08); }.head-metrics > span:not(.tier) { display:none; } }
+.custom-voice-editor{display:grid;gap:8px;margin-top:10px;padding:12px;border:1px solid rgba(159,255,216,.12);background:rgba(159,255,216,.025)}.custom-voice-editor>label{color:#66756e;font:8px 'DM Mono';letter-spacing:.08em}.custom-voice-editor select{width:100%;height:42px;padding:0 11px;border:1px solid rgba(255,255,255,.11);outline:0;background:#090e0c;color:#c3cec8;font-size:9px}.custom-voice-editor select:focus{border-color:rgba(159,255,216,.45)}.custom-voice-editor>p{margin:0;color:#52615a;font:8px/1.55 'DM Mono'}.custom-voice-editor>p.voice-binding-error{padding:8px;border-left:2px solid var(--danger);background:rgba(255,118,104,.06);color:#e68d83}.call-dock{position:relative}.dock-voice-warning{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);margin:0;color:#e68d83;font:7px 'DM Mono';white-space:nowrap}
 </style>

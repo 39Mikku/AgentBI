@@ -84,6 +84,51 @@ class LiveConversationPreparationTests(unittest.TestCase):
                 "alice", other["id"], self.thread["id"]
             )
 
+    def test_registered_live_voice_must_match_current_realtime_model(self):
+        from AgentBI.src.services.live.conversation_service import (
+            LiveConversationService,
+            LiveWorkspaceError,
+        )
+
+        remote_id = "qwen-audio-3.0-realtime-plus-livevoice-001"
+        self.repository.create_toolbox_tts_voice({
+            "user_id": "alice",
+            "provider": "bailian",
+            "display_name": "Plus narrator",
+            "external_voice_id": remote_id,
+            "voice_kind": "cloned",
+            "bound_model": "qwen-audio-3.0-realtime-plus",
+            "provider_metadata": {"usage": "live"},
+        })
+        self.repository.update_live_role(self.role["id"], "alice", {"voice": remote_id})
+
+        self.repository.save_live_preferences(
+            "alice", {"model": "qwen-audio-3.0-realtime-plus"}
+        )
+        prepared = LiveConversationService(self.repository).prepare(
+            "alice", self.role["id"], self.thread["id"]
+        )
+        self.assertEqual(prepared.config.voice, remote_id)
+
+        self.repository.save_live_preferences(
+            "alice", {"model": "qwen-audio-3.0-realtime-flash"}
+        )
+        with self.assertRaisesRegex(LiveWorkspaceError, "voice.*model"):
+            LiveConversationService(self.repository).prepare(
+                "alice", self.role["id"], self.thread["id"]
+            )
+
+    def test_unregistered_manual_voice_id_remains_supported(self):
+        from AgentBI.src.services.live.conversation_service import LiveConversationService
+
+        self.repository.update_live_role(
+            self.role["id"], "alice", {"voice": "manually-created-voice-id"}
+        )
+        prepared = LiveConversationService(self.repository).prepare(
+            "alice", self.role["id"], self.thread["id"]
+        )
+        self.assertEqual(prepared.config.voice, "manually-created-voice-id")
+
 
 class LiveCallRecorderTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

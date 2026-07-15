@@ -83,3 +83,6 @@ Desktop.ini
 
 # ---------- Local chat storage ----------
 AgentBI/data/
+
+# ---------- 无关参考文件 ----------
+工具箱/
