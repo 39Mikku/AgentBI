@@ -17,7 +17,11 @@ class EmailAgent:
         "If recipient information is still missing, state exactly what is needed."
     )
 
-    def __init__(self, repository: SqliteChatRepository | None = None):
+    def __init__(
+        self,
+        repository: SqliteChatRepository | None = None,
+        settings: dict[str, Any] | None = None,
+    ):
         self.repository = repository
 
     @staticmethod

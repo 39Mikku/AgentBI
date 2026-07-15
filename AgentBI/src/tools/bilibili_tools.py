@@ -43,11 +43,32 @@ def _content(videos: list[BilibiliVideo]) -> str:
     )
 
 
-async def search_videos(client: BilibiliClient, query: str) -> BilibiliToolResult:
-    videos = await client.search_videos(query, limit=3)
+async def search_videos(client: BilibiliClient, query: str, limit: int = 3) -> BilibiliToolResult:
+    videos = await client.search_videos(query, limit=limit)
     return BilibiliToolResult(
         content=_content(videos) if videos else "没有找到匹配的哔哩哔哩视频。",
         card=_card("bilibili.video-list", f"搜索：{query}", videos) if videos else None,
+    )
+
+
+async def search_creator_videos(
+    client: BilibiliClient,
+    creator: str,
+    query: str = "",
+    *,
+    limit: int = 3,
+    scan_limit: int = 20,
+) -> BilibiliToolResult:
+    videos = await client.search_creator_videos(
+        creator,
+        query,
+        limit=limit,
+        scan_limit=scan_limit,
+    )
+    subject = f"{creator} · {query}" if query else f"{creator} · 最新投稿"
+    return BilibiliToolResult(
+        content=_content(videos) if videos else f"没有在 {creator} 的稿件中找到匹配视频。",
+        card=_card("bilibili.video-list", subject, videos) if videos else None,
     )
 
 
@@ -57,4 +78,3 @@ async def get_video_detail(client: BilibiliClient, bvid: str) -> BilibiliToolRes
         content=_content([video]),
         card=_card("bilibili.video", "视频详情", [video]),
     )
-

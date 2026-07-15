@@ -7,6 +7,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from AgentBI.src.services.netease_music_client import NeteaseMusicClient
+from AgentBI.src.schemas.subagent_settings_schema import MusicSubagentConfig
 from AgentBI.src.tools.music_tools import (
     MusicToolResult,
     daily_recommendations,
@@ -21,8 +22,9 @@ class MusicAgent:
         "必须通过工具获得真实歌曲数据，不得编造歌曲 ID。得到结果后用一句简短中文说明卡片内容。"
     )
 
-    def __init__(self, client: NeteaseMusicClient | None):
+    def __init__(self, client: NeteaseMusicClient | None, settings: dict[str, Any] | None = None):
         self.client = client
+        self.settings = MusicSubagentConfig.model_validate(settings or {})
 
     @staticmethod
     def tool_definitions() -> list[dict[str, Any]]:
@@ -31,7 +33,7 @@ class MusicAgent:
                 "type": "function",
                 "function": {
                     "name": "search_tracks",
-                    "description": "按歌曲名、歌手或关键词搜索网易云音乐，最多返回三首。",
+                    "description": "按歌曲名、歌手或关键词搜索网易云音乐，返回数量由音乐子代理配置决定。",
                     "parameters": {
                         "type": "object",
                         "properties": {"query": {"type": "string"}},
@@ -138,9 +140,9 @@ class MusicAgent:
                 query = str(payload.get("query", "")).strip()
                 if not query:
                     return MusicToolResult("请提供要搜索的歌曲、歌手或关键词。")
-                return await search_tracks(self.client, query)
+                return await search_tracks(self.client, query, self.settings.search_result_limit)
             if name == "daily_recommendations":
-                return await daily_recommendations(self.client)
+                return await daily_recommendations(self.client, self.settings.daily_result_limit)
             if name == "resolve_track":
                 return await resolve_track(self.client, str(payload.get("track_id", "")))
             return MusicToolResult(f"未知音乐工具: {name}")

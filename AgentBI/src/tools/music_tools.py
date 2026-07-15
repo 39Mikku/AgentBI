@@ -42,16 +42,16 @@ def _content(tracks: list[MusicTrack]) -> str:
     )
 
 
-async def search_tracks(client: NeteaseMusicClient, query: str) -> MusicToolResult:
-    tracks = await client.search_tracks(query)
+async def search_tracks(client: NeteaseMusicClient, query: str, limit: int = 3) -> MusicToolResult:
+    tracks = await client.search_tracks(query, limit=limit)
     return MusicToolResult(
         content=_content(tracks) if tracks else "没有找到匹配的歌曲。",
         card=_card("music.track-list", f"搜索：{query}", tracks) if tracks else None,
     )
 
 
-async def daily_recommendations(client: NeteaseMusicClient) -> MusicToolResult:
-    tracks = await client.daily_recommendations()
+async def daily_recommendations(client: NeteaseMusicClient, limit: int = 10) -> MusicToolResult:
+    tracks = await client.daily_recommendations(limit=limit)
     return MusicToolResult(
         content=_content(tracks) if tracks else "今天暂时没有可用的每日推荐。",
         card=_card("music.track-list", "今日推荐", tracks) if tracks else None,

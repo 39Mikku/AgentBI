@@ -124,6 +124,7 @@ def create_subagent(
     repository: Any = None,
     music_client: Any = None,
     bilibili_client: Any = None,
+    settings: dict[str, Any] | None = None,
 ) -> Any | None:
     registration = get_subagent_registration(delegate_name)
     if not registration:
@@ -136,4 +137,4 @@ def create_subagent(
     }
     dependency = dependency_map.get(registration.dependency)
     agent_type = getattr(import_module(registration.agent_module), registration.agent_class_name)
-    return agent_type(dependency)
+    return agent_type(dependency, settings=settings)

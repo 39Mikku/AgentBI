@@ -7,18 +7,26 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from AgentBI.src.services.bilibili_client import BilibiliClient
-from AgentBI.src.tools.bilibili_tools import BilibiliToolResult, get_video_detail, search_videos
+from AgentBI.src.schemas.subagent_settings_schema import BilibiliSubagentConfig
+from AgentBI.src.tools.bilibili_tools import (
+    BilibiliToolResult,
+    get_video_detail,
+    search_creator_videos,
+    search_videos,
+)
 
 
 class BilibiliAgent:
     system_prompt = (
         "你是哔哩哔哩视频子代理。根据用户意图搜索公开视频，或按 BV 号获取视频详情。"
+        "用户明确提到某个 UP 主时，优先调用 search_creator_videos，只在该 UP 主稿件内查找。"
         "必须通过工具取得真实视频数据，不得编造 BV 号。得到结果后，用一句简短中文说明卡片内容。"
         "你不负责点赞、投币、收藏、评论或账户操作。"
     )
 
-    def __init__(self, client: BilibiliClient | None):
+    def __init__(self, client: BilibiliClient | None, settings: dict[str, Any] | None = None):
         self.client = client
+        self.settings = BilibiliSubagentConfig.model_validate(settings or {})
 
     @staticmethod
     def tool_definitions() -> list[dict[str, Any]]:
@@ -27,11 +35,26 @@ class BilibiliAgent:
                 "type": "function",
                 "function": {
                     "name": "search_videos",
-                    "description": "按标题、UP 主或关键词搜索哔哩哔哩公开视频，最多返回三个候选。",
+                    "description": "全站按标题或关键词搜索哔哩哔哩公开视频；用户指定 UP 主时不要使用此工具。",
                     "parameters": {
                         "type": "object",
                         "properties": {"query": {"type": "string", "description": "视频搜索关键词"}},
                         "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_creator_videos",
+                    "description": "用户明确指定 UP 主时，从该 UP 主的稿件中搜索；query 可留空以获取最新投稿。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "creator": {"type": "string", "description": "UP 主名称或 UID"},
+                            "query": {"type": "string", "description": "稿件标题或简介关键词，可留空"},
+                        },
+                        "required": ["creator"],
                     },
                 },
             },
@@ -126,7 +149,18 @@ class BilibiliAgent:
                 query = str(payload.get("query", "")).strip()
                 if not query:
                     return BilibiliToolResult("请提供视频搜索关键词。")
-                return await search_videos(self.client, query)
+                return await search_videos(self.client, query, self.settings.default_result_limit)
+            if name == "search_creator_videos":
+                creator = str(payload.get("creator", "")).strip()
+                if not creator:
+                    return BilibiliToolResult("请提供 UP 主名称或 UID。")
+                return await search_creator_videos(
+                    self.client,
+                    creator,
+                    str(payload.get("query", "")).strip(),
+                    limit=self.settings.default_result_limit,
+                    scan_limit=self.settings.creator_scan_limit,
+                )
             if name == "get_video_detail":
                 bvid = str(payload.get("bvid", "")).strip()
                 if not bvid:
@@ -140,6 +174,6 @@ class BilibiliAgent:
     def _tool_label(name: str) -> str:
         return {
             "search_videos": "搜索哔哩哔哩视频",
+            "search_creator_videos": "搜索 UP 主稿件",
             "get_video_detail": "获取哔哩哔哩视频",
         }.get(name, name)
-

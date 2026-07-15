@@ -75,6 +75,51 @@ class BilibiliClient:
                 break
         return videos
 
+    async def search_creator_videos(
+        self,
+        creator: str,
+        query: str = "",
+        *,
+        limit: int = 3,
+        scan_limit: int = 20,
+    ) -> list[BilibiliVideo]:
+        normalized_creator = creator.strip()
+        if not normalized_creator:
+            raise BilibiliClientError("请提供 UP 主名称或 UID")
+        safe_limit = min(max(int(limit), 1), 10)
+        safe_scan_limit = min(max(int(scan_limit), safe_limit), 50)
+        exact_author_only = False
+        try:
+            payload = await self._search_cli_creator_videos(normalized_creator, safe_scan_limit)
+        except BilibiliClientError:
+            if normalized_creator.isdigit():
+                raise
+            payload = await self.search_provider(" ".join(filter(None, (normalized_creator, query.strip()))))
+            exact_author_only = True
+        except Exception as exc:
+            raise BilibiliClientError("UP 主稿件搜索失败") from exc
+
+        keyword = query.strip().casefold()
+        items = payload.get("result", []) if isinstance(payload, Mapping) else []
+        videos: list[BilibiliVideo] = []
+        for item in items:
+            if not isinstance(item, Mapping) or not self.is_bvid(item.get("bvid")):
+                continue
+            owner = item.get("owner") if isinstance(item.get("owner"), Mapping) else {}
+            author = str(item.get("author") or item.get("uname") or owner.get("name") or "").strip()
+            if exact_author_only and author.casefold() != normalized_creator.casefold():
+                continue
+            haystack = "\n".join(
+                str(item.get(key) or "")
+                for key in ("title", "description", "desc")
+            ).casefold()
+            if keyword and keyword not in haystack:
+                continue
+            videos.append(self._normalize_search_video(item))
+            if len(videos) >= safe_limit:
+                break
+        return videos
+
     async def get_video(self, bvid: str) -> BilibiliVideo:
         normalized_bvid = bvid.strip()
         if not self.is_bvid(normalized_bvid):
@@ -119,6 +164,38 @@ class BilibiliClient:
         if not isinstance(items, list):
             raise BilibiliClientError("Bilibili CLI 返回了无效搜索数据")
 
+        return {"result": await self._enrich_cli_items(items)}
+
+    async def _search_cli_creator_videos(self, creator: str, scan_limit: int) -> dict[str, Any]:
+        environment = {
+            **os.environ,
+            "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "OUTPUT": "json",
+        }
+        arguments = [
+            self.cli_command,
+            "user-videos",
+            creator,
+            "--max",
+            str(scan_limit),
+            "--json",
+        ]
+        try:
+            returncode, stdout, _stderr = await self.cli_runner(arguments, environment)
+            payload = json.loads(stdout or "{}")
+        except BilibiliClientError:
+            raise
+        except Exception as exc:
+            raise BilibiliClientError("Bilibili CLI 调用失败") from exc
+        if returncode != 0 or not isinstance(payload, Mapping) or payload.get("ok") is not True:
+            raise BilibiliClientError("Bilibili CLI UP 主稿件搜索失败")
+        items = payload.get("data")
+        if not isinstance(items, list):
+            raise BilibiliClientError("Bilibili CLI 返回了无效稿件数据")
+        return {"result": await self._enrich_cli_items(items)}
+
+    async def _enrich_cli_items(self, items: list[Any]) -> list[dict[str, Any]]:
         details = await asyncio.gather(
             *[
                 self.detail_provider(str(item.get("bvid")))
@@ -138,7 +215,7 @@ class BilibiliClient:
             if isinstance(detail, Mapping):
                 merged.update(detail)
             enriched.append(merged)
-        return {"result": enriched}
+        return enriched
 
     async def _run_cli(
         self,

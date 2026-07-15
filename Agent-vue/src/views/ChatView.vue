@@ -326,6 +326,7 @@ onMounted(async () => {
           ><b>›</b>
         </button>
         <button @click="router.push('/settings/models')">◈ 模型工作室</button>
+        <button @click="router.push('/settings/subagents')">⌘ 子代理配置</button>
         <button @click="logout">↗ 退出会话</button>
       </div>
     </aside>
@@ -793,6 +794,25 @@ onMounted(async () => {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #555a52 #1d1d1d;
+  scrollbar-gutter: stable;
+}
+.conversation-list::-webkit-scrollbar {
+  width: 6px;
+}
+.conversation-list::-webkit-scrollbar-track {
+  background: #1d1d1d;
+  border-left: 1px solid #292929;
+}
+.conversation-list::-webkit-scrollbar-thumb {
+  min-height: 34px;
+  background: #51564e;
+  border: 1px solid #1d1d1d;
+  border-radius: 0;
+}
+.conversation-list::-webkit-scrollbar-thumb:hover {
+  background: var(--acid);
 }
 .conversation-row {
   display: flex;

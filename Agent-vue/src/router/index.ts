@@ -35,6 +35,12 @@ const router = createRouter({
       meta: { title: '模型工作室 · AgentBI', requiresAuth: true },
     },
     {
+      path: '/settings/subagents',
+      name: 'subagent-settings',
+      component: () => import('@/views/SubagentSettingsView.vue'),
+      meta: { title: '子代理配置 · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/console',
       name: 'console',
       component: () => import('@/views/AboutView.vue'),

@@ -17,6 +17,7 @@ from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 from AgentBI.src.services.memory_service import MemoryService
 from AgentBI.src.services.bilibili_client import BilibiliClient
 from AgentBI.src.services.netease_music_client import NeteaseMusicClient
+from AgentBI.src.schemas.subagent_settings_schema import resolve_subagent_config
 
 
 class ChatAgent:
@@ -180,6 +181,11 @@ class ChatAgent:
             for call in tool_calls.values():
                 registration = get_subagent_registration(call["name"])
                 if registration:
+                    stored_settings = (
+                        self.repository.get_subagent_config(self.user_id, registration.capability_id)
+                        if self.repository and self.user_id
+                        else None
+                    )
                     subagent = create_subagent(
                         call["name"],
                         dependencies={
@@ -187,6 +193,10 @@ class ChatAgent:
                             "music_client": self.music_client,
                             "bilibili_client": self.bilibili_client,
                         },
+                        settings=resolve_subagent_config(
+                            registration.capability_id,
+                            stored_settings,
+                        ),
                     )
                     yield {"type": "tool_started", "tool": registration.display_name}
                     async for event in subagent.stream(

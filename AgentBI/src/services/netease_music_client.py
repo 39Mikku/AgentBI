@@ -37,19 +37,21 @@ class NeteaseMusicClient:
         self.http_client = http_client
         self.timeout = timeout
 
-    async def search_tracks(self, query: str) -> list[MusicTrack]:
+    async def search_tracks(self, query: str, limit: int = 3) -> list[MusicTrack]:
+        safe_limit = min(max(int(limit), 1), 10)
         payload = await self._request(
             "/cloudsearch",
-            params={"keywords": query.strip(), "limit": 3, "type": 1},
+            params={"keywords": query.strip(), "limit": safe_limit, "type": 1},
         )
         songs = self._mapping(payload.get("result")).get("songs") or []
-        return [self._normalize_track(song) for song in songs[:3] if isinstance(song, Mapping)]
+        return [self._normalize_track(song) for song in songs[:safe_limit] if isinstance(song, Mapping)]
 
-    async def daily_recommendations(self) -> list[MusicTrack]:
+    async def daily_recommendations(self, limit: int = 10) -> list[MusicTrack]:
+        safe_limit = min(max(int(limit), 1), 30)
         payload = await self._request("/recommend/songs")
         data = self._mapping(payload.get("data"))
         songs = data.get("dailySongs") or payload.get("recommend") or []
-        return [self._normalize_track(song) for song in songs[:10] if isinstance(song, Mapping)]
+        return [self._normalize_track(song) for song in songs[:safe_limit] if isinstance(song, Mapping)]
 
     async def resolve_track(self, track_id: str) -> MusicTrack:
         payload = await self._request("/song/detail", params={"ids": str(track_id)})

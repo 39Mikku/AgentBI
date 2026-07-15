@@ -53,6 +53,23 @@ export interface AssistantMemory {
   updated_at?: string | null
 }
 
+export interface SubagentSettingField {
+  key: string
+  label: string
+  description: string
+  type: 'number' | 'boolean' | 'text'
+  minimum?: number | null
+  maximum?: number | null
+}
+
+export interface SubagentSettings {
+  capability_id: string
+  display_name: string
+  description: string
+  config: Record<string, string | number | boolean>
+  fields: SubagentSettingField[]
+}
+
 export type ModelRouteRole = 'embedding' | 'compression' | 'memory' | 'title'
 
 export interface ModelRoute {

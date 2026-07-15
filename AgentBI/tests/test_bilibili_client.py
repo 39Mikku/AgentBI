@@ -7,6 +7,46 @@ import httpx
 
 
 class BilibiliClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_creator_search_uses_user_videos_and_filters_within_that_creator(self):
+        from AgentBI.src.services.bilibili_client import BilibiliClient
+
+        calls = []
+
+        async def cli_runner(arguments, _environment):
+            calls.append(arguments)
+            return 0, '{"ok":true,"data":[{"bvid":"BV1xx411c7mD","title":"AI 摄影实战","author":"影视飓风","desc":"完整流程"},{"bvid":"BV1Q541167Qg","title":"旅行记录","author":"影视飓风","desc":"外拍"}]}', ""
+
+        async def detail_provider(bvid):
+            return {"bvid": bvid, "title": "AI 摄影实战" if bvid.endswith("c7mD") else "旅行记录", "owner": {"name": "影视飓风"}}
+
+        videos = await BilibiliClient(
+            cli_runner=cli_runner,
+            detail_provider=detail_provider,
+        ).search_creator_videos("影视飓风", "AI", limit=3, scan_limit=25)
+
+        self.assertEqual([video.bvid for video in videos], ["BV1xx411c7mD"])
+        self.assertEqual(calls[0][1:3], ["user-videos", "影视飓风"])
+        self.assertIn("25", calls[0])
+
+    async def test_creator_search_falls_back_to_exact_author_when_user_videos_is_blocked(self):
+        from AgentBI.src.services.bilibili_client import BilibiliClient
+
+        async def cli_runner(arguments, _environment):
+            if arguments[1] == "user-videos":
+                return 1, '{"ok":false,"error":{"code":"network_error"}}', ""
+            return 0, '{"ok":true,"data":[{"bvid":"BV1xx411c7mD","title":"AI 实战","author":"影视飓风"},{"bvid":"BV1Q541167Qg","title":"影视飓风 AI 点评","author":"其他作者"}]}', ""
+
+        async def detail_provider(bvid):
+            author = "影视飓风" if bvid.endswith("c7mD") else "其他作者"
+            return {"bvid": bvid, "title": "AI 实战", "owner": {"name": author}}
+
+        videos = await BilibiliClient(
+            cli_runner=cli_runner,
+            detail_provider=detail_provider,
+        ).search_creator_videos("影视飓风", "AI", limit=3, scan_limit=20)
+
+        self.assertEqual([video.author for video in videos], ["影视飓风"])
+
     async def test_search_normalizes_public_video_results_and_respects_limit(self):
         from AgentBI.src.services.bilibili_client import BilibiliClient
 

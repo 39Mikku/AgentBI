@@ -2,7 +2,12 @@ import unittest
 
 
 class _FakeBilibiliClient:
+    def __init__(self):
+        self.search_limit = None
+        self.creator_call = None
+
     async def search_videos(self, query, limit=3):
+        self.search_limit = limit
         from AgentBI.src.schemas.bilibili_schema import BilibiliVideo
 
         return [
@@ -16,6 +21,10 @@ class _FakeBilibiliClient:
                 url="https://www.bilibili.com/video/BV1xx411c7mD",
             )
         ][:limit]
+
+    async def search_creator_videos(self, creator, query="", limit=3, scan_limit=20):
+        self.creator_call = (creator, query, limit, scan_limit)
+        return await self.search_videos(query or creator, limit=limit)
 
     async def get_video(self, bvid):
         from AgentBI.src.schemas.bilibili_schema import BilibiliVideo
@@ -38,7 +47,7 @@ class BilibiliAgentTests(unittest.IsolatedAsyncioTestCase):
         from AgentBI.src.agents.bilibili_agent import BilibiliAgent
 
         names = {tool["function"]["name"] for tool in BilibiliAgent.tool_definitions()}
-        self.assertEqual(names, {"search_videos", "get_video_detail"})
+        self.assertEqual(names, {"search_videos", "search_creator_videos", "get_video_detail"})
 
     async def test_search_returns_stable_video_card_without_player_or_cookie_data(self):
         from AgentBI.src.agents.bilibili_agent import BilibiliAgent
@@ -83,6 +92,24 @@ class BilibiliAgentTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result.card)
         self.assertIn("未知", result.content)
+
+    async def test_bilibili_agent_uses_bilibili_limits_for_global_and_creator_search(self):
+        from AgentBI.src.agents.bilibili_agent import BilibiliAgent
+
+        client = _FakeBilibiliClient()
+        agent = BilibiliAgent(
+            client,
+            settings={"default_result_limit": 4, "creator_scan_limit": 26},
+        )
+
+        await agent._invoke_tool("search_videos", '{"query":"AI"}')
+        self.assertEqual(client.search_limit, 4)
+
+        await agent._invoke_tool(
+            "search_creator_videos",
+            '{"creator":"影视飓风","query":"AI"}',
+        )
+        self.assertEqual(client.creator_call, ("影视飓风", "AI", 4, 26))
 
 
 if __name__ == "__main__":
