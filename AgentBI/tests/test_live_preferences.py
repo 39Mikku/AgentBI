@@ -16,15 +16,15 @@ class LivePreferenceRepositoryTests(unittest.TestCase):
         alice_defaults = self.repository.get_live_preferences("alice")
 
         self.assertEqual(alice_defaults["model"], "qwen-audio-3.0-realtime-flash")
-        self.assertEqual(alice_defaults["voice"], "longanqian")
-        self.assertIn("口语", alice_defaults["instructions"])
+        self.assertEqual(alice_defaults["history_context_turns"], 12)
+        self.assertEqual(alice_defaults["max_history_turns"], 20)
 
         self.repository.save_live_preferences(
             "alice",
             {
                 "model": "qwen-audio-3.0-realtime-plus",
-                "voice": "longanlingxi",
-                "instructions": "你是一位实时语音主持人。",
+                "history_context_turns": 0,
+                "max_history_turns": 36,
             },
         )
 
@@ -38,49 +38,65 @@ class LivePreferenceRepositoryTests(unittest.TestCase):
         )
 
     def test_partial_live_preference_updates_keep_existing_values(self):
-        self.repository.save_live_preferences("alice", {"voice": "longanxiaoxin"})
+        self.repository.save_live_preferences("alice", {"history_context_turns": 0})
         updated = self.repository.save_live_preferences(
-            "alice", {"instructions": "只说简洁的纯文本。"}
+            "alice", {"max_history_turns": 50}
         )
 
         self.assertEqual(updated["model"], "qwen-audio-3.0-realtime-flash")
-        self.assertEqual(updated["voice"], "longanxiaoxin")
-        self.assertEqual(updated["instructions"], "只说简洁的纯文本。")
+        self.assertEqual(updated["history_context_turns"], 0)
+        self.assertEqual(updated["max_history_turns"], 50)
+
+    def test_default_live_role_inherits_legacy_voice_and_instructions(self):
+        role = self.repository.ensure_default_live_role("alice")
+
+        self.assertEqual(role["voice"], "longanqian")
+        self.assertIn("口语", role["instructions"])
+        self.assertTrue(role["is_default"])
 
 
 class LivePreferenceSchemaTests(unittest.TestCase):
-    def test_live_preferences_accept_only_supported_models_and_voices(self):
+    def test_live_preferences_accept_only_supported_models_and_history_ranges(self):
         from AgentBI.src.api.live import LivePreferencesUpdate
+
+        payload = LivePreferencesUpdate(
+            model="qwen-audio-3.0-realtime-flash",
+            history_context_turns=0,
+            max_history_turns=50,
+        )
+        self.assertEqual(payload.history_context_turns, 0)
 
         with self.assertRaises(ValidationError):
             LivePreferencesUpdate(
                 model="unknown-model",
-                voice="longanqian",
-                instructions="hello",
+                history_context_turns=12,
+                max_history_turns=20,
             )
 
         with self.assertRaises(ValidationError):
             LivePreferencesUpdate(
                 model="qwen-audio-3.0-realtime-flash",
-                voice="unknown-voice",
-                instructions="hello",
+                history_context_turns=51,
+                max_history_turns=20,
             )
 
-    def test_live_preferences_reject_blank_or_oversized_instructions(self):
-        from AgentBI.src.api.live import LivePreferencesUpdate
+    def test_live_role_accepts_custom_voice_but_rejects_blank_fields(self):
+        from AgentBI.src.api.live import LiveRoleCreate
+
+        payload = LiveRoleCreate(
+            user_id="alice",
+            name="旅行伙伴",
+            instructions="自然地交流",
+            voice="clone-voice-001",
+        )
+        self.assertEqual(payload.voice, "clone-voice-001")
 
         with self.assertRaises(ValidationError):
-            LivePreferencesUpdate(
-                model="qwen-audio-3.0-realtime-flash",
-                voice="longanqian",
-                instructions="   ",
-            )
-
-        with self.assertRaises(ValidationError):
-            LivePreferencesUpdate(
-                model="qwen-audio-3.0-realtime-flash",
-                voice="longanqian",
-                instructions="x" * 12001,
+            LiveRoleCreate(
+                user_id="alice",
+                name="旅行伙伴",
+                instructions="自然地交流",
+                voice="   ",
             )
 
 

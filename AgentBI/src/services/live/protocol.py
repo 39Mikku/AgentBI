@@ -30,7 +30,7 @@ def map_upstream_event(event: dict[str, Any]) -> list[LiveOutput]:
     event_type = event.get("type")
 
     if event_type == "session.updated":
-        return [LiveEvent("session.ready")]
+        return []
     if event_type == "input_audio_buffer.speech_started":
         return [LiveEvent("state.listening", _payload(event, "item_id"))]
     if event_type == "input_audio_buffer.committed":

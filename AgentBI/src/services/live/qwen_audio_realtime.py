@@ -4,7 +4,7 @@ import asyncio
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 import websockets
 
@@ -20,6 +20,16 @@ class LiveSessionConfig:
     model: str
     voice: str
     instructions: str
+    max_history_turns: int = 20
+
+
+LiveEventHandler = Callable[[LiveEvent], Awaitable[LiveEvent | None]]
+
+
+class LiveSessionPreparationError(RuntimeError):
+    def __init__(self, event: LiveEvent):
+        super().__init__(event.payload.get("message", "Live session preparation failed"))
+        self.event = event
 
 
 class QwenAudioRealtimeSession:
@@ -52,18 +62,29 @@ class QwenAudioRealtimeSession:
                 "voice": config.voice,
                 "instructions": config.instructions,
                 "turn_detection": {"type": "smart_turn"},
-                "max_history_turns": 20,
+                "max_history_turns": config.max_history_turns,
             },
         }
 
-    async def run(self, frontend: Any, config: LiveSessionConfig) -> None:
+    async def run(
+        self,
+        frontend: Any,
+        config: LiveSessionConfig,
+        event_handler: LiveEventHandler | None = None,
+    ) -> None:
         async with self.connector(
             self._url(config.model),
             additional_headers={"Authorization": f"Bearer {self.api_key}"},
         ) as upstream:
-            await upstream.send(json.dumps(self._session_update(config), ensure_ascii=False))
+            try:
+                await self._prepare(frontend, upstream, config)
+            except LiveSessionPreparationError as error:
+                await frontend.send_json(error.event.as_dict())
+                return
             frontend_task = asyncio.create_task(self._forward_frontend(frontend, upstream))
-            upstream_task = asyncio.create_task(self._forward_upstream(frontend, upstream))
+            upstream_task = asyncio.create_task(
+                self._forward_upstream(frontend, upstream, event_handler)
+            )
             tasks = {frontend_task, upstream_task}
             try:
                 _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -77,6 +98,50 @@ class QwenAudioRealtimeSession:
                     if not task.done():
                         task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _prepare(
+        self,
+        frontend: Any,
+        upstream: Any,
+        config: LiveSessionConfig,
+    ) -> None:
+        await upstream.send(json.dumps(self._session_update(config), ensure_ascii=False))
+        await self._wait_for_ack(upstream, "session.updated")
+        await frontend.send_json({"type": "session.ready"})
+
+    @staticmethod
+    async def _wait_for_ack(upstream: Any, expected_type: str) -> dict[str, Any]:
+        while True:
+            raw = await upstream.recv()
+            try:
+                event = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                raise LiveSessionPreparationError(
+                    LiveEvent(
+                        "session.error",
+                        {
+                            "code": "invalid_upstream_event",
+                            "message": "实时语音服务返回了无法识别的准备事件",
+                            "recoverable": True,
+                        },
+                    )
+                )
+            if event.get("type") == expected_type:
+                return event
+            if event.get("type") == "error":
+                mapped = map_upstream_event(event)
+                error = next(
+                    (item for item in mapped if isinstance(item, LiveEvent)),
+                    LiveEvent(
+                        "session.error",
+                        {
+                            "code": "upstream_error",
+                            "message": "实时语音会话准备失败",
+                            "recoverable": False,
+                        },
+                    ),
+                )
+                raise LiveSessionPreparationError(error)
 
     @staticmethod
     async def _forward_frontend(frontend: Any, upstream: Any) -> None:
@@ -105,7 +170,11 @@ class QwenAudioRealtimeSession:
                     return
 
     @staticmethod
-    async def _forward_upstream(frontend: Any, upstream: Any) -> None:
+    async def _forward_upstream(
+        frontend: Any,
+        upstream: Any,
+        event_handler: LiveEventHandler | None = None,
+    ) -> None:
         async for raw in upstream:
             try:
                 event = json.loads(raw)
@@ -125,4 +194,6 @@ class QwenAudioRealtimeSession:
                 if isinstance(output, LiveAudio):
                     await frontend.send_bytes(output.pcm)
                 else:
-                    await frontend.send_json(output.as_dict())
+                    handled = await event_handler(output) if event_handler else output
+                    if handled is not None:
+                        await frontend.send_json(handled.as_dict())

@@ -41,6 +41,10 @@ class ChatRouteTests(unittest.TestCase):
         self.assertIn("/capabilities/settings", capability_settings_paths)
         self.assertIn("/capabilities/{capability_id}/settings", capability_settings_paths)
         self.assertIn("/live/preferences", live_paths)
+        self.assertIn("/live/roles", live_paths)
+        self.assertIn("/live/roles/{role_id}/memory", live_paths)
+        self.assertIn("/live/conversations", live_paths)
+        self.assertIn("/live/conversations/{conversation_id}/messages", live_paths)
         self.assertIn("/live/ws", live_paths)
 
 

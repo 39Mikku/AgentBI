@@ -11,11 +11,13 @@ export type LivePhase =
 
 export interface LiveTranscript {
   id: string
+  messageId?: string
   role: 'user' | 'assistant'
   text: string
   stash: string
   final: boolean
   interrupted: boolean
+  status: 'streaming' | 'complete' | 'interrupted'
 }
 
 export interface LiveState {
@@ -47,7 +49,15 @@ function transcript(
 ): LiveTranscript {
   let item = state.transcripts.find((entry) => entry.id === id)
   if (!item) {
-    item = { id, role, text: '', stash: '', final: false, interrupted: false }
+    item = {
+      id,
+      role,
+      text: '',
+      stash: '',
+      final: false,
+      interrupted: false,
+      status: 'streaming',
+    }
     state.transcripts.push(item)
   }
   return item
@@ -81,6 +91,8 @@ export function applyLiveEvent(state: LiveState, event: LiveServerEvent): LiveEv
       item.text = event.transcript
       item.stash = ''
       item.final = true
+      item.status = 'complete'
+      item.messageId = event.message_id
       break
     }
     case 'assistant.transcript.delta': {
@@ -92,6 +104,8 @@ export function applyLiveEvent(state: LiveState, event: LiveServerEvent): LiveEv
       const item = transcript(state, event.item_id, 'assistant')
       item.text = event.transcript
       item.final = true
+      item.status = 'complete'
+      item.messageId = event.message_id
       break
     }
     case 'response.interrupted': {
@@ -100,7 +114,12 @@ export function applyLiveEvent(state: LiveState, event: LiveServerEvent): LiveEv
       const latestAssistant = [...state.transcripts]
         .reverse()
         .find((item) => item.role === 'assistant' && !item.final)
-      if (latestAssistant) latestAssistant.interrupted = true
+      if (latestAssistant) {
+        latestAssistant.interrupted = true
+        latestAssistant.final = true
+        latestAssistant.status = 'interrupted'
+        latestAssistant.messageId = event.message_id
+      }
       break
     }
     case 'response.completed':

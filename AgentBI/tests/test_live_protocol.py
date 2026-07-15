@@ -8,7 +8,7 @@ class LiveProtocolTests(unittest.TestCase):
 
         self.assertEqual(
             map_upstream_event({"type": "session.updated"}),
-            [LiveEvent("session.ready")],
+            [],
         )
         self.assertEqual(
             map_upstream_event(

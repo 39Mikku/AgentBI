@@ -11,6 +11,11 @@ from AgentBI.src.agents.assistant_registry import DEFAULT_ASSISTANT_CAPABILITIES
 
 DEFAULT_LIVE_PREFERENCES = {
     "model": "qwen-audio-3.0-realtime-flash",
+    "history_context_turns": 12,
+    "max_history_turns": 20,
+}
+
+DEFAULT_LIVE_ROLE = {
     "voice": "longanqian",
     "instructions": "你是一位自然、简洁的实时语音助手。请使用适合口语朗读的纯文本回答。",
 }
@@ -55,6 +60,41 @@ class SqliteChatRepository:
                 CREATE TABLE IF NOT EXISTS live_preferences (
                     user_id TEXT PRIMARY KEY, model TEXT NOT NULL, voice TEXT NOT NULL,
                     instructions TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS live_roles (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL,
+                    instructions TEXT NOT NULL, voice TEXT NOT NULL, avatar_data_url TEXT,
+                    memory_enabled INTEGER NOT NULL DEFAULT 0, is_default INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS live_roles_one_default_per_user
+                    ON live_roles(user_id) WHERE is_default = 1;
+                CREATE TABLE IF NOT EXISTS live_threads (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+                    role_id TEXT NOT NULL REFERENCES live_roles(id) ON DELETE CASCADE,
+                    title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    last_message_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS live_threads_by_role_updated
+                    ON live_threads(user_id, role_id, last_message_at DESC);
+                CREATE TABLE IF NOT EXISTS live_messages (
+                    id TEXT PRIMARY KEY,
+                    thread_id TEXT NOT NULL REFERENCES live_threads(id) ON DELETE CASCADE,
+                    user_id TEXT NOT NULL,
+                    role_id TEXT NOT NULL REFERENCES live_roles(id) ON DELETE CASCADE,
+                    item_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL,
+                    status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS live_messages_by_upstream_item
+                    ON live_messages(thread_id, item_id);
+                CREATE INDEX IF NOT EXISTS live_messages_by_thread_created
+                    ON live_messages(thread_id, created_at);
+                CREATE TABLE IF NOT EXISTS live_role_memories (
+                    user_id TEXT NOT NULL,
+                    role_id TEXT NOT NULL REFERENCES live_roles(id) ON DELETE CASCADE,
+                    content TEXT NOT NULL DEFAULT '', last_message_id TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(user_id, role_id)
                 );
                 CREATE TABLE IF NOT EXISTS capability_settings (
                     user_id TEXT NOT NULL, capability_id TEXT NOT NULL,
@@ -147,10 +187,16 @@ class SqliteChatRepository:
                 "context_summary": "TEXT",
                 "context_summary_until_message_id": "TEXT",
             }
+            live_preference_columns = {
+                "history_context_turns": "INTEGER NOT NULL DEFAULT 12",
+                "max_history_turns": "INTEGER NOT NULL DEFAULT 20",
+            }
             for name, definition in assistant_columns.items():
                 self._ensure_column("assistants", name, definition)
             for name, definition in thread_columns.items():
                 self._ensure_column("chat_threads", name, definition)
+            for name, definition in live_preference_columns.items():
+                self._ensure_column("live_preferences", name, definition)
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         columns = {row[1] for row in self._connection.execute(f"PRAGMA table_info({table})")}
@@ -240,6 +286,32 @@ class SqliteChatRepository:
         item["updated_at"] = self._parse_time(item["updated_at"])
         return item
 
+    def _live_role_document(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if not row:
+            return None
+        item = dict(row)
+        item["memory_enabled"] = bool(item["memory_enabled"])
+        item["is_default"] = bool(item["is_default"])
+        item["created_at"] = self._parse_time(item["created_at"])
+        item["updated_at"] = self._parse_time(item["updated_at"])
+        return item
+
+    def _live_thread_document(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if not row:
+            return None
+        item = dict(row)
+        for name in ("created_at", "updated_at", "last_message_at"):
+            item[name] = self._parse_time(item[name])
+        return item
+
+    def _live_message_document(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if not row:
+            return None
+        item = dict(row)
+        item["created_at"] = self._parse_time(item["created_at"])
+        item["updated_at"] = self._parse_time(item["updated_at"])
+        return item
+
     # Provider, preference, and profile persistence ---------------------------------
 
     def create_provider(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -301,20 +373,364 @@ class SqliteChatRepository:
     def get_live_preferences(self, user_id: str) -> dict[str, Any]:
         with self._lock:
             row = self._one("SELECT * FROM live_preferences WHERE user_id = ?", (user_id,))
-        return dict(row) if row else {"user_id": user_id, **DEFAULT_LIVE_PREFERENCES}
+        if not row:
+            return {"user_id": user_id, **DEFAULT_LIVE_PREFERENCES}
+        item = dict(row)
+        return {
+            "user_id": user_id,
+            "model": item["model"],
+            "history_context_turns": item["history_context_turns"],
+            "max_history_turns": item["max_history_turns"],
+            "created_at": item["created_at"],
+            "updated_at": item["updated_at"],
+        }
 
     def save_live_preferences(self, user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         values = {**self.get_live_preferences(user_id), **fields}
         now = self._time()
+        with self._lock:
+            legacy = self._one(
+                "SELECT voice, instructions FROM live_preferences WHERE user_id = ?",
+                (user_id,),
+            )
+        voice = legacy["voice"] if legacy else DEFAULT_LIVE_ROLE["voice"]
+        instructions = legacy["instructions"] if legacy else DEFAULT_LIVE_ROLE["instructions"]
         with self._lock, self._connection:
             self._connection.execute(
-                """INSERT INTO live_preferences(user_id, model, voice, instructions, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
-                model=excluded.model, voice=excluded.voice, instructions=excluded.instructions,
+                """INSERT INTO live_preferences(
+                    user_id, model, voice, instructions, history_context_turns,
+                    max_history_turns, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
+                model=excluded.model, history_context_turns=excluded.history_context_turns,
+                max_history_turns=excluded.max_history_turns,
                 updated_at=excluded.updated_at""",
-                (user_id, values["model"], values["voice"], values["instructions"], now, now),
+                (
+                    user_id,
+                    values["model"],
+                    voice,
+                    instructions,
+                    values["history_context_turns"],
+                    values["max_history_turns"],
+                    now,
+                    now,
+                ),
             )
         return self.get_live_preferences(user_id)
+
+    def ensure_default_live_role(self, user_id: str) -> dict[str, Any]:
+        with self._lock:
+            existing = self._live_role_document(
+                self._one(
+                    "SELECT * FROM live_roles WHERE user_id = ? AND is_default = 1",
+                    (user_id,),
+                )
+            )
+            legacy = self._one(
+                "SELECT voice, instructions FROM live_preferences WHERE user_id = ?",
+                (user_id,),
+            )
+        if existing:
+            return existing
+        role_id, now = self._id(), self._time()
+        voice = legacy["voice"] if legacy else DEFAULT_LIVE_ROLE["voice"]
+        instructions = legacy["instructions"] if legacy else DEFAULT_LIVE_ROLE["instructions"]
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT OR IGNORE INTO live_roles(
+                    id, user_id, name, instructions, voice, avatar_data_url,
+                    memory_enabled, is_default, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, NULL, 0, 1, ?, ?)""",
+                (role_id, user_id, "默认角色", instructions, voice, now, now),
+            )
+            row = self._one(
+                "SELECT * FROM live_roles WHERE user_id = ? AND is_default = 1",
+                (user_id,),
+            )
+        return self._live_role_document(row)  # type: ignore[return-value]
+
+    def list_live_roles(self, user_id: str) -> list[dict[str, Any]]:
+        self.ensure_default_live_role(user_id)
+        with self._lock:
+            rows = self._all(
+                "SELECT * FROM live_roles WHERE user_id = ? ORDER BY is_default DESC, created_at ASC",
+                (user_id,),
+            )
+        return [self._live_role_document(row) for row in rows]  # type: ignore[list-item]
+
+    def get_live_role(self, role_id: str, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            return self._live_role_document(
+                self._one(
+                    "SELECT * FROM live_roles WHERE id = ? AND user_id = ?",
+                    (role_id, user_id),
+                )
+            )
+
+    def create_live_role(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.ensure_default_live_role(payload["user_id"])
+        role_id, now = self._id(), self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO live_roles(
+                    id, user_id, name, instructions, voice, avatar_data_url,
+                    memory_enabled, is_default, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+                (
+                    role_id,
+                    payload["user_id"],
+                    payload["name"],
+                    payload["instructions"],
+                    payload["voice"],
+                    payload.get("avatar_data_url"),
+                    int(payload.get("memory_enabled", False)),
+                    now,
+                    now,
+                ),
+            )
+        return self.get_live_role(role_id, payload["user_id"])  # type: ignore[return-value]
+
+    def update_live_role(
+        self,
+        role_id: str,
+        user_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if not self.get_live_role(role_id, user_id):
+            return None
+        allowed = {"name", "instructions", "voice", "avatar_data_url", "memory_enabled"}
+        values = {key: value for key, value in fields.items() if key in allowed}
+        if values:
+            assignments = []
+            params: list[Any] = []
+            for key, value in values.items():
+                assignments.append(f"{key} = ?")
+                params.append(int(value) if key == "memory_enabled" else value)
+            params.extend([self._time(), role_id, user_id])
+            with self._lock, self._connection:
+                self._connection.execute(
+                    f"UPDATE live_roles SET {', '.join(assignments)}, updated_at = ? WHERE id = ? AND user_id = ?",
+                    tuple(params),
+                )
+        return self.get_live_role(role_id, user_id)
+
+    def delete_live_role(self, role_id: str, user_id: str) -> bool:
+        role = self.get_live_role(role_id, user_id)
+        if not role or role["is_default"]:
+            return False
+        with self._lock, self._connection:
+            return bool(
+                self._connection.execute(
+                    "DELETE FROM live_roles WHERE id = ? AND user_id = ?",
+                    (role_id, user_id),
+                ).rowcount
+            )
+
+    def create_live_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.get_live_role(payload["role_id"], payload["user_id"]):
+            raise ValueError("Live role not found")
+        thread_id, now = self._id(), self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO live_threads(
+                    id, user_id, role_id, title, created_at, updated_at, last_message_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    thread_id,
+                    payload["user_id"],
+                    payload["role_id"],
+                    payload.get("title") or "新语音会话",
+                    now,
+                    now,
+                    now,
+                ),
+            )
+        return self.get_live_conversation(thread_id, payload["user_id"])  # type: ignore[return-value]
+
+    def list_live_conversations(self, user_id: str, role_id: str) -> list[dict[str, Any]]:
+        if not self.get_live_role(role_id, user_id):
+            return []
+        with self._lock:
+            rows = self._all(
+                """SELECT * FROM live_threads
+                WHERE user_id = ? AND role_id = ? ORDER BY last_message_at DESC""",
+                (user_id, role_id),
+            )
+        return [self._live_thread_document(row) for row in rows]  # type: ignore[list-item]
+
+    def get_live_conversation(self, conversation_id: str, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            return self._live_thread_document(
+                self._one(
+                    "SELECT * FROM live_threads WHERE id = ? AND user_id = ?",
+                    (conversation_id, user_id),
+                )
+            )
+
+    def update_live_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        fields: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if not self.get_live_conversation(conversation_id, user_id):
+            return None
+        title = fields.get("title")
+        if title is not None:
+            now = self._time()
+            with self._lock, self._connection:
+                self._connection.execute(
+                    "UPDATE live_threads SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                    (title, now, conversation_id, user_id),
+                )
+        return self.get_live_conversation(conversation_id, user_id)
+
+    def delete_live_conversation(self, conversation_id: str, user_id: str) -> bool:
+        with self._lock, self._connection:
+            return bool(
+                self._connection.execute(
+                    "DELETE FROM live_threads WHERE id = ? AND user_id = ?",
+                    (conversation_id, user_id),
+                ).rowcount
+            )
+
+    def append_live_message(
+        self,
+        conversation_id: str,
+        user_id: str,
+        role_id: str,
+        role: str,
+        content: str,
+        item_id: str,
+        status: str = "complete",
+    ) -> dict[str, Any]:
+        thread = self.get_live_conversation(conversation_id, user_id)
+        if not thread or thread["role_id"] != role_id:
+            raise ValueError("Live conversation not found")
+        with self._lock:
+            existing = self._live_message_document(
+                self._one(
+                    "SELECT * FROM live_messages WHERE thread_id = ? AND item_id = ?",
+                    (conversation_id, item_id),
+                )
+            )
+        if existing:
+            return existing
+        message_id, now = self._id(), self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO live_messages(
+                    id, thread_id, user_id, role_id, item_id, role, content,
+                    status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    message_id,
+                    conversation_id,
+                    user_id,
+                    role_id,
+                    item_id,
+                    role,
+                    content,
+                    status,
+                    now,
+                    now,
+                ),
+            )
+            self._connection.execute(
+                """UPDATE live_threads SET updated_at = ?, last_message_at = ?
+                WHERE id = ? AND user_id = ?""",
+                (now, now, conversation_id, user_id),
+            )
+            row = self._one("SELECT * FROM live_messages WHERE id = ?", (message_id,))
+        return self._live_message_document(row)  # type: ignore[return-value]
+
+    def list_live_messages(self, conversation_id: str, user_id: str) -> list[dict[str, Any]]:
+        if not self.get_live_conversation(conversation_id, user_id):
+            return []
+        with self._lock:
+            rows = self._all(
+                """SELECT * FROM live_messages
+                WHERE thread_id = ? AND user_id = ? ORDER BY created_at ASC""",
+                (conversation_id, user_id),
+            )
+        return [self._live_message_document(row) for row in rows]  # type: ignore[list-item]
+
+    def list_live_replay_messages(
+        self,
+        conversation_id: str,
+        user_id: str,
+        turns: int,
+    ) -> list[dict[str, Any]]:
+        messages = [
+            item
+            for item in self.list_live_messages(conversation_id, user_id)
+            if item["status"] == "complete" and item["role"] in {"user", "assistant"}
+        ]
+        pairs: list[list[dict[str, Any]]] = []
+        pending_user: dict[str, Any] | None = None
+        for message in messages:
+            if message["role"] == "user":
+                pending_user = message
+            elif pending_user:
+                pairs.append([pending_user, message])
+                pending_user = None
+        selected = pairs if turns == 0 else pairs[-max(1, turns) :]
+        return [message for pair in selected for message in pair]
+
+    def list_live_role_messages(self, user_id: str, role_id: str) -> list[dict[str, Any]]:
+        if not self.get_live_role(role_id, user_id):
+            return []
+        with self._lock:
+            rows = self._all(
+                """SELECT * FROM live_messages
+                WHERE user_id = ? AND role_id = ? AND status = 'complete'
+                ORDER BY created_at ASC""",
+                (user_id, role_id),
+            )
+        return [self._live_message_document(row) for row in rows]  # type: ignore[list-item]
+
+    def get_live_role_memory(self, user_id: str, role_id: str) -> dict[str, Any]:
+        with self._lock:
+            row = self._one(
+                "SELECT * FROM live_role_memories WHERE user_id = ? AND role_id = ?",
+                (user_id, role_id),
+            )
+        return dict(row) if row else {
+            "user_id": user_id,
+            "role_id": role_id,
+            "content": "",
+            "last_message_id": None,
+            "updated_at": None,
+        }
+
+    def save_live_role_memory(
+        self,
+        user_id: str,
+        role_id: str,
+        content: str,
+        last_message_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.get_live_role(role_id, user_id):
+            raise ValueError("Live role not found")
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO live_role_memories(
+                    user_id, role_id, content, last_message_id, updated_at
+                ) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, role_id) DO UPDATE SET
+                content=excluded.content, last_message_id=excluded.last_message_id,
+                updated_at=excluded.updated_at""",
+                (user_id, role_id, content, last_message_id, now),
+            )
+        return self.get_live_role_memory(user_id, role_id)
+
+    def clear_live_role_memory(self, user_id: str, role_id: str) -> bool:
+        with self._lock, self._connection:
+            return bool(
+                self._connection.execute(
+                    "DELETE FROM live_role_memories WHERE user_id = ? AND role_id = ?",
+                    (user_id, role_id),
+                ).rowcount
+            )
 
     def get_capability_config(self, user_id: str, capability_id: str) -> dict[str, Any] | None:
         with self._lock:

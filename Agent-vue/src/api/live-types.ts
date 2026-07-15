@@ -17,8 +17,52 @@ export type LiveVoiceId = (typeof LIVE_VOICES)[number]
 export interface LivePreferences {
   user_id: string
   model: LiveModelId
-  voice: LiveVoiceId
+  history_context_turns: number
+  max_history_turns: number
+}
+
+export interface LiveRole {
+  id: string
+  user_id: string
+  name: string
   instructions: string
+  voice: string
+  avatar_data_url: string | null
+  memory_enabled: boolean
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface LiveRoleMemory {
+  user_id: string
+  role_id: string
+  content: string
+  last_message_id: string | null
+  updated_at: string | null
+}
+
+export interface LiveConversation {
+  id: string
+  user_id: string
+  role_id: string
+  title: string
+  created_at: string
+  updated_at: string
+  last_message_at: string
+}
+
+export interface LiveMessage {
+  id: string
+  thread_id: string
+  user_id: string
+  role_id: string
+  item_id: string
+  role: 'user' | 'assistant'
+  content: string
+  status: 'complete' | 'interrupted'
+  created_at: string
+  updated_at: string
 }
 
 export type LiveServerEvent =
@@ -27,10 +71,29 @@ export type LiveServerEvent =
   | { type: 'state.thinking'; item_id?: string }
   | { type: 'state.speaking' }
   | { type: 'user.transcript.delta'; item_id: string; text: string; stash?: string }
-  | { type: 'user.transcript.final'; item_id: string; transcript: string }
+  | {
+      type: 'user.transcript.final'
+      item_id: string
+      transcript: string
+      message_id?: string
+      conversation_id?: string
+      status?: 'complete'
+    }
   | { type: 'assistant.transcript.delta'; item_id: string; delta: string }
-  | { type: 'assistant.transcript.final'; item_id: string; transcript: string }
-  | { type: 'response.interrupted' }
+  | {
+      type: 'assistant.transcript.final'
+      item_id: string
+      transcript: string
+      message_id?: string
+      conversation_id?: string
+      status?: 'complete'
+    }
+  | {
+      type: 'response.interrupted'
+      message_id?: string
+      conversation_id?: string
+      status?: 'interrupted'
+    }
   | { type: 'response.completed' }
   | { type: 'session.closed' }
   | {
@@ -42,7 +105,6 @@ export type LiveServerEvent =
 
 export interface LiveSessionStart {
   type: 'session.start'
-  model: LiveModelId
-  voice: LiveVoiceId
-  instructions: string
+  role_id: string
+  conversation_id: string | null
 }

@@ -30,9 +30,8 @@ describe('LiveSocketClient', () => {
 
     const connecting = client.connect('elysia@example.com', {
       type: 'session.start',
-      model: 'qwen-audio-3.0-realtime-flash',
-      voice: 'longanqian',
-      instructions: '自然交流。',
+      role_id: 'role-a',
+      conversation_id: 'thread-a',
     })
     socket.onopen?.()
     await connecting
@@ -42,7 +41,8 @@ describe('LiveSocketClient', () => {
     )
     expect(JSON.parse(String(socket.sent[0]))).toMatchObject({
       type: 'session.start',
-      model: 'qwen-audio-3.0-realtime-flash',
+      role_id: 'role-a',
+      conversation_id: 'thread-a',
     })
   })
 
@@ -58,9 +58,8 @@ describe('LiveSocketClient', () => {
     })
     const connecting = client.connect('user', {
       type: 'session.start',
-      model: 'qwen-audio-3.0-realtime-plus',
-      voice: 'longanlingxi',
-      instructions: 'hello',
+      role_id: 'role-b',
+      conversation_id: 'thread-b',
     })
     socket.onopen?.()
     await connecting
@@ -85,9 +84,8 @@ describe('LiveSocketClient', () => {
     })
     const connecting = client.connect('user', {
       type: 'session.start',
-      model: 'qwen-audio-3.0-realtime-flash',
-      voice: 'longanqian',
-      instructions: 'hello',
+      role_id: 'role-a',
+      conversation_id: 'thread-a',
     })
     socket.onopen?.()
     await connecting

@@ -61,6 +61,8 @@ describe('Live state reducer', () => {
         stash: '',
         final: true,
         interrupted: false,
+        messageId: undefined,
+        status: 'complete',
       },
     ])
   })
