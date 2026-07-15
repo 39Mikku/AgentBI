@@ -20,7 +20,66 @@ class _FakeProcess:
         return self.returncode
 
 
+class _FakeSyncProcess:
+    def __init__(self, returncode=None):
+        self.returncode = returncode
+        self.terminated = False
+        self.killed = False
+        self.stdout = _FakeSyncStream()
+        self.stderr = _FakeSyncStream()
+
+    def terminate(self):
+        self.terminated = True
+        self.returncode = 0
+
+    def kill(self):
+        self.killed = True
+        self.returncode = -9
+
+    def wait(self):
+        return self.returncode
+
+
+class _FakeSyncStream:
+    def __init__(self):
+        self.closed = False
+
+    def readline(self):
+        return b""
+
+    def close(self):
+        self.closed = True
+
+
 class MusicApiProcessManagerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sync_process_factory_does_not_require_asyncio_subprocess_support(self):
+        from AgentBI.src.services.music_api_process import MusicApiProcessManager
+
+        starts = []
+        process = _FakeSyncProcess()
+
+        def sync_process_factory(*args, **kwargs):
+            starts.append((args, kwargs))
+            return process
+
+        manager = MusicApiProcessManager(
+            enabled=True,
+            startup_timeout=0.2,
+            poll_interval=0,
+            sync_process_factory=sync_process_factory,
+            health_probe=lambda _: asyncio.sleep(0, result=True),
+            command=("node", "app.cjs"),
+        )
+
+        await manager.start()
+        await manager.stop()
+
+        self.assertEqual(len(starts), 1)
+        self.assertEqual(starts[0][0], (("node", "app.cjs"),))
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.stdout.closed)
+        self.assertTrue(process.stderr.closed)
+
     async def test_disabled_manager_never_starts_a_process(self):
         from AgentBI.src.services.music_api_process import MusicApiProcessManager
 

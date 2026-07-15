@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import subprocess
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
@@ -16,6 +17,7 @@ logger = Logger.get_logger(__name__)
 
 HealthProbe = Callable[[str], Awaitable[bool]]
 ProcessFactory = Callable[..., Awaitable[Any]]
+SyncProcessFactory = Callable[..., Any]
 
 
 class MusicApiProcessManager:
@@ -30,6 +32,7 @@ class MusicApiProcessManager:
         *,
         poll_interval: float = 0.25,
         process_factory: ProcessFactory | None = None,
+        sync_process_factory: SyncProcessFactory | None = None,
         health_probe: HealthProbe | None = None,
         working_directory: str | Path | None = None,
     ) -> None:
@@ -40,11 +43,13 @@ class MusicApiProcessManager:
         self.base_url = f"http://127.0.0.1:{port}"
         self.working_directory = Path(working_directory or self._default_working_directory())
         self.command = tuple(command or ("node", str(self.working_directory / "app.cjs")))
-        self._process_factory = process_factory or asyncio.create_subprocess_exec
+        self._process_factory = process_factory
+        self._sync_process_factory = sync_process_factory or subprocess.Popen
         self._health_probe = health_probe or self._default_health_probe
         self._process: Any | None = None
         self._log_tasks: list[asyncio.Task[None]] = []
         self._restart_consumed = False
+        self._uses_sync_process = False
         self.available = False
 
     @staticmethod
@@ -110,14 +115,21 @@ class MusicApiProcessManager:
         }
         if os.name == "nt":
             kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
-        self._process = await self._process_factory(*self.command, **kwargs)
+        if self._process_factory is not None:
+            self._uses_sync_process = False
+            self._process = await self._process_factory(*self.command, **kwargs)
+        else:
+            self._uses_sync_process = True
+            self._process = await asyncio.to_thread(self._sync_process_factory, self.command, **kwargs)
         self._log_tasks = []
         for stream, level in (
             (getattr(self._process, "stdout", None), "info"),
             (getattr(self._process, "stderr", None), "warning"),
         ):
             if stream is not None:
-                self._log_tasks.append(asyncio.create_task(self._forward_logs(stream, level)))
+                self._log_tasks.append(
+                    asyncio.create_task(self._forward_logs(stream, level, self._uses_sync_process))
+                )
 
     async def _stop_process(self) -> None:
         process = self._process
@@ -125,20 +137,29 @@ class MusicApiProcessManager:
         if process is not None and process.returncode is None:
             process.terminate()
             try:
-                await asyncio.wait_for(process.wait(), timeout=3)
+                await asyncio.wait_for(self._wait_process(process), timeout=3)
             except asyncio.TimeoutError:
                 process.kill()
-                await process.wait()
+                await self._wait_process(process)
         for task in self._log_tasks:
             task.cancel()
         if self._log_tasks:
             await asyncio.gather(*self._log_tasks, return_exceptions=True)
         self._log_tasks = []
+        if process is not None and self._uses_sync_process:
+            for stream in (getattr(process, "stdout", None), getattr(process, "stderr", None)):
+                if stream is not None and not stream.closed:
+                    stream.close()
 
-    async def _forward_logs(self, stream: Any, level: str) -> None:
+    async def _wait_process(self, process: Any) -> Any:
+        if self._uses_sync_process:
+            return await asyncio.to_thread(process.wait)
+        return await process.wait()
+
+    async def _forward_logs(self, stream: Any, level: str, sync_stream: bool) -> None:
         log = getattr(logger, level)
         while True:
-            line = await stream.readline()
+            line = await asyncio.to_thread(stream.readline) if sync_stream else await stream.readline()
             if not line:
                 return
             text = line.decode("utf-8", errors="replace").strip()
