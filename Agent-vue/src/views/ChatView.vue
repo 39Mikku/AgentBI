@@ -6,6 +6,7 @@ import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { renderMarkdown } from '@/utils/markdown'
+import { shouldRefreshUserProfile } from '@/utils/profile-refresh'
 import { createRuntimeContext } from '@/utils/runtime-context'
 import type { ChatMessage } from '@/api/chat-types'
 
@@ -186,7 +187,7 @@ async function commitRename(id: string) {
   cancelRename()
 }
 async function loadProfile() {
-  if (profile.value?.user_id === userId.value) return
+  if (!shouldRefreshUserProfile(profile.value, userId.value)) return
   try {
     auth.setProfile(await getUserProfile(userId.value))
   } catch (error) {
