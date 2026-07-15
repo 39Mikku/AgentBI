@@ -2,7 +2,7 @@ from typing import Any
 
 import httpx
 
-from AgentBI.src.repositories.chat_repository import ChatRepository
+from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 
 
 def normalize_model_ids(payload: dict[str, Any]) -> list[str]:
@@ -16,7 +16,7 @@ def normalize_model_ids(payload: dict[str, Any]) -> list[str]:
 
 
 class ProviderService:
-    def __init__(self, repository: ChatRepository, client: httpx.AsyncClient | None = None):
+    def __init__(self, repository: SqliteChatRepository, client: httpx.AsyncClient | None = None):
         self.repository = repository
         self.client = client
 
@@ -34,4 +34,3 @@ class ProviderService:
         response.raise_for_status()
         models = normalize_model_ids(response.json())
         return self.repository.update_provider(provider_id, {"available_models": models})
-

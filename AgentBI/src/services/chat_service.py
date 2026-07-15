@@ -2,7 +2,7 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
-from AgentBI.src.repositories.chat_repository import ChatRepository
+from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 
 
 def build_context_messages(messages: list[dict[str, Any]], context_turns: int) -> list[dict[str, str]]:
@@ -45,7 +45,7 @@ def format_model_error(error: Exception) -> str:
 
 
 class ChatService:
-    def __init__(self, repository: ChatRepository):
+    def __init__(self, repository: SqliteChatRepository):
         self.repository = repository
 
     def build_context(self, conversation_id: str, user_id: str, context_turns: int) -> list[dict[str, str]]:

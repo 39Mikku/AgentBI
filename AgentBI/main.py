@@ -1,6 +1,6 @@
 import os
 from contextlib import asynccontextmanager
-from datetime import timezone
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
@@ -13,8 +13,8 @@ from AgentBI.src.api.providers import router as provider_router
 from AgentBI.src.api.user_profile import router as user_profile_router
 from AgentBI.src.api.assistants import router as assistant_router
 from AgentBI.src.logging.logging import Logger
-from AgentBI.src.repositories.chat_repository import ChatRepository
-from pymongo import MongoClient
+from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
+from AgentBI.src.services.user_directory import MongoUserDirectory
 
 logger = Logger.get_logger(__name__)
 
@@ -22,18 +22,13 @@ logger = Logger.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.login_agent = LoginAgent()
-    mongo_uri = os.getenv("MONGO_URI")
-    if mongo_uri:
-        client = MongoClient(mongo_uri, tz_aware=True, tzinfo=timezone.utc)
-        app.state.mongo_client = client
-        app.state.chat_repository = ChatRepository(client[os.getenv("MONGO_DATABASE", "chat_bi")])
-        app.state.chat_repository.ensure_indexes()
-    else:
-        app.state.chat_repository = None
+    sqlite_path = os.getenv("CHAT_SQLITE_PATH") or str(Path(__file__).resolve().parent / "data" / "agentbi.sqlite3")
+    app.state.chat_repository = SqliteChatRepository(sqlite_path)
+    app.state.user_directory = MongoUserDirectory(os.getenv("MONGO_URI"), os.getenv("MONGO_DATABASE", "chat_bi"))
     logger.info("创建 AgentBI 服务生命周期")
     yield
-    if getattr(app.state, "mongo_client", None):
-        app.state.mongo_client.close()
+    app.state.chat_repository.close()
+    app.state.user_directory.close()
     logger.info("销毁 AgentBI 服务生命周期")
 
 

@@ -80,3 +80,6 @@ Desktop.ini
 *_backup_*.zip
 *.bak
 *.tmp
+
+# ---------- Local chat storage ----------
+AgentBI/data/
