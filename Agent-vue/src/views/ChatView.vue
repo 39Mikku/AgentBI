@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ModelAvatar from '@/components/ModelAvatar.vue'
 import TimelineCard from '@/components/cards/TimelineCard.vue'
+import BilibiliPlayerModal from '@/components/BilibiliPlayerModal.vue'
 import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -11,6 +12,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import { shouldRefreshUserProfile } from '@/utils/profile-refresh'
 import { createRuntimeContext } from '@/utils/runtime-context'
 import type { ChatMessage } from '@/api/chat-types'
+import type { BilibiliVideo } from '@/utils/bilibili-player'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -29,6 +31,7 @@ const editingMessageId = ref('')
 const editingMessageContent = ref('')
 const timeline = ref<HTMLElement | null>(null)
 const previewTurn = ref(-1)
+const activeBilibiliVideo = ref<BilibiliVideo | null>(null)
 const userId = computed(() => auth.email || 'local-user')
 const modelLabel = computed(() => chat.preferences.model || '选择模型')
 const userName = computed(
@@ -157,6 +160,9 @@ function selectVersion(message: ChatMessage, direction: -1 | 1) {
 }
 function branchFrom(message: ChatMessage) {
   void chat.branch(userId.value, message.id)
+}
+function openBilibiliVideo(video: BilibiliVideo) {
+  activeBilibiliVideo.value = video
 }
 function keydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey) {
@@ -401,6 +407,7 @@ onMounted(async () => {
                   v-else-if="event.type === 'card'"
                   :kind="event.kind"
                   :payload="event.payload"
+                  @play-bilibili="openBilibiliVideo"
                 />
                 <div
                   v-else
@@ -549,6 +556,7 @@ onMounted(async () => {
         <p class="disclaimer">OBSIDIAN 可以调用已连接的能力；请核对执行结果。</p>
       </footer>
     </main>
+    <BilibiliPlayerModal :video="activeBilibiliVideo" @close="activeBilibiliVideo = null" />
     <div v-if="profileOpen" class="profile-backdrop" @click.self="profileOpen = false">
       <section class="profile-panel">
         <button class="close-panel" @click="profileOpen = false">×</button>

@@ -63,6 +63,18 @@ SUBAGENTS = (
         agent_module="AgentBI.src.agents.music_agent",
         agent_class_name="MusicAgent",
     ),
+    SubagentRegistration(
+        capability_id="agent.bilibili",
+        display_name="Bilibili 视频子代理",
+        description="搜索哔哩哔哩公开视频、获取视频详情并推送可播放卡片。",
+        prompt="需要搜索、查找或播放哔哩哔哩视频时，调用 delegate_bilibili 委派给视频子代理。",
+        delegate_name="delegate_bilibili",
+        delegate_description="将哔哩哔哩视频搜索、详情查询或点播任务委派给视频子代理。",
+        task_label="哔哩哔哩视频任务",
+        dependency="bilibili_client",
+        agent_module="AgentBI.src.agents.bilibili_agent",
+        agent_class_name="BilibiliAgent",
+    ),
 )
 
 _SUBAGENTS_BY_DELEGATE = {registration.delegate_name: registration for registration in SUBAGENTS}
@@ -108,12 +120,20 @@ def get_subagent_registration(delegate_name: str) -> SubagentRegistration | None
 def create_subagent(
     delegate_name: str,
     *,
+    dependencies: dict[str, Any] | None = None,
     repository: Any = None,
     music_client: Any = None,
+    bilibili_client: Any = None,
 ) -> Any | None:
     registration = get_subagent_registration(delegate_name)
     if not registration:
         return None
-    dependency = repository if registration.dependency == "repository" else music_client
+    dependency_map = {
+        "repository": repository,
+        "music_client": music_client,
+        "bilibili_client": bilibili_client,
+        **(dependencies or {}),
+    }
+    dependency = dependency_map.get(registration.dependency)
     agent_type = getattr(import_module(registration.agent_module), registration.agent_class_name)
     return agent_type(dependency)

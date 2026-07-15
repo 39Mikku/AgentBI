@@ -6,7 +6,7 @@ class ChatAgentTests(unittest.TestCase):
         from AgentBI.src.agents.chat_agent import ChatAgent
 
         names = {tool["function"]["name"] for tool in ChatAgent.tool_definitions()}
-        self.assertEqual(names, {"delegate_email", "delegate_music"})
+        self.assertEqual(names, {"delegate_email", "delegate_music", "delegate_bilibili"})
 
     def test_music_delegation_is_exposed_only_when_capability_is_mounted(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
@@ -17,16 +17,30 @@ class ChatAgentTests(unittest.TestCase):
         self.assertEqual(disabled, {"delegate_email"})
         self.assertEqual(enabled, {"delegate_music"})
 
+    def test_bilibili_delegation_is_exposed_only_when_capability_is_mounted(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        disabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions(["agent.email"])}
+        enabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions(["agent.bilibili"])}
+
+        self.assertEqual(disabled, {"delegate_email"})
+        self.assertEqual(enabled, {"delegate_bilibili"})
+
     def test_subagents_are_resolved_from_one_registry(self):
         from AgentBI.src.agents.assistant_registry import create_subagent, get_subagent_registration
         from AgentBI.src.agents.email_agent import EmailAgent
         from AgentBI.src.agents.music_agent import MusicAgent
+        from AgentBI.src.agents.bilibili_agent import BilibiliAgent
 
         music_registration = get_subagent_registration("delegate_music")
 
         self.assertEqual(music_registration.display_name, "音乐子代理")
         self.assertIsInstance(create_subagent("delegate_music", music_client=object()), MusicAgent)
         self.assertIsInstance(create_subagent("delegate_email", repository=object()), EmailAgent)
+        self.assertIsInstance(
+            create_subagent("delegate_bilibili", dependencies={"bilibili_client": object()}),
+            BilibiliAgent,
+        )
         self.assertIsNone(create_subagent("delegate_unknown"))
 
     def test_email_delegation_description_leaves_recipient_lookup_to_the_subagent(self):

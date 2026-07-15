@@ -12,6 +12,7 @@ from AgentBI.src.api.dependencies import get_chat_repository
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.schemas.chat_schema import ChatEditStreamRequest, ChatRetryStreamRequest, ChatStreamRequest
 from AgentBI.src.services.chat_service import append_timeline_event, encode_sse_event, format_model_error
+from AgentBI.src.services.bilibili_client import BilibiliClient
 from AgentBI.src.services.memory_service import MemoryService, build_context_bundle
 from AgentBI.src.api.music import get_music_client
 from AgentBI.src.services.netease_music_client import NeteaseMusicClient
@@ -114,6 +115,7 @@ def stream_assistant(
     memory_summary: str | None = None,
     context_summary: str | None = None,
     music_client: NeteaseMusicClient | None = None,
+    bilibili_client: BilibiliClient | None = None,
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -137,6 +139,7 @@ def stream_assistant(
                 context_summary,
                 conversation_id,
                 music_client,
+                bilibili_client,
             ).stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
@@ -231,6 +234,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             memory_service.core_memory(payload.user_id, assistant),
             bundle["summary"],
             get_music_client(request),
+            BilibiliClient(),
         ),
         media_type="text/event-stream",
     )
@@ -278,6 +282,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             memory_service.core_memory(payload.user_id, assistant),
             bundle["summary"],
             get_music_client(request),
+            BilibiliClient(),
         ),
         media_type="text/event-stream",
     )
@@ -317,6 +322,7 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             memory_service.core_memory(payload.user_id, assistant),
             bundle["summary"],
             get_music_client(request),
+            BilibiliClient(),
         ),
         media_type="text/event-stream",
     )

@@ -131,3 +131,20 @@ npm run build
 ```
 
 网易云音乐配置位于 `AgentBI/.env`：复制 `.env.example` 后填写 `NCM_COOKIE`。Cookie 只由 Python 内部客户端作为请求头发送，不写入 SQLite、SSE 或前端；失效时更新该值并重启后端。可用 `NCM_AUDIO_LEVEL` 调整音质等级，默认 `standard`。
+
+## 8. Bilibili 视频子代理
+
+- 能力 ID：`agent.bilibili`；主助手委派入口：`delegate_bilibili`。
+- 子代理只暴露 `search_videos` 与 `get_video_detail`，不处理登录、点赞、投币、收藏或评论。
+- 搜索通过本机 `bilibili-cli` 的结构化 JSON 输出完成，后端强制 UTF-8 并使用无窗口子进程；它不是常驻服务。详情使用公开详情接口补齐封面、简介、时长与播放量。
+- 搜索结果以 `bilibili.video-list` 或 `bilibili.video` 卡片写入消息时间线。卡片只保存 BV 号和稳定元数据，不保存 Cookie 或临时视频流地址。
+- 点击卡片后，前端在聊天工作台上方打开哔哩哔哩官方内嵌播放器；播放失败时可通过卡片或播放器标题栏跳转官方视频页。
+
+首次使用前安装 CLI：
+
+```powershell
+uv tool install bilibili-cli
+bili search "Python 教程" --type video --max 1 --json
+```
+
+默认命令为 `bili`，需要指定其他可执行文件时在 `AgentBI/.env` 设置 `BILI_CLI_COMMAND`。Windows 后端会自动设置 `PYTHONUTF8=1` 与 `PYTHONIOENCODING=utf-8`，无需单独修改系统编码。

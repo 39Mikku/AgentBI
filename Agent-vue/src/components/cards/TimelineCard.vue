@@ -2,9 +2,13 @@
 import { computed } from 'vue'
 import MusicTrackCard from './MusicTrackCard.vue'
 import MusicTrackListCard from './MusicTrackListCard.vue'
+import BilibiliVideoCard from './BilibiliVideoCard.vue'
+import BilibiliVideoListCard from './BilibiliVideoListCard.vue'
 import type { MusicTrack } from '@/utils/music-player'
+import { isValidBvid, type BilibiliVideo } from '@/utils/bilibili-player'
 
 const props = defineProps<{ kind?: string; payload?: Record<string, unknown> }>()
+const emit = defineEmits<{ playBilibili: [video: BilibiliVideo] }>()
 const title = computed(() => (typeof props.payload?.title === 'string' ? props.payload.title : undefined))
 const tracks = computed<MusicTrack[]>(() => {
   const items = Array.isArray(props.payload?.tracks) ? props.payload.tracks : []
@@ -22,11 +26,39 @@ const tracks = computed<MusicTrack[]>(() => {
       unavailable_reason: typeof item.unavailable_reason === 'string' ? item.unavailable_reason : null,
     }))
 })
+const videos = computed<BilibiliVideo[]>(() => {
+  const items = Array.isArray(props.payload?.videos) ? props.payload.videos : []
+  return items
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .filter((item) => typeof item.bvid === 'string' && isValidBvid(item.bvid))
+    .map((item) => ({
+      bvid: item.bvid as string,
+      title: typeof item.title === 'string' ? item.title : '未命名视频',
+      author: typeof item.author === 'string' ? item.author : '',
+      cover_url: typeof item.cover_url === 'string' ? item.cover_url : null,
+      duration_seconds: typeof item.duration_seconds === 'number' ? item.duration_seconds : 0,
+      play_count: typeof item.play_count === 'number' ? item.play_count : 0,
+      published_at: typeof item.published_at === 'number' ? item.published_at : null,
+      description: typeof item.description === 'string' ? item.description : '',
+      url: typeof item.url === 'string' ? item.url : undefined,
+    }))
+})
 </script>
 
 <template>
   <MusicTrackListCard v-if="kind === 'music.track-list'" :title="title" :tracks="tracks" />
   <MusicTrackCard v-else-if="kind === 'music.track' && tracks[0]" :track="tracks[0]" />
+  <BilibiliVideoListCard
+    v-else-if="kind === 'bilibili.video-list'"
+    :title="title"
+    :videos="videos"
+    @play="emit('playBilibili', $event)"
+  />
+  <BilibiliVideoCard
+    v-else-if="kind === 'bilibili.video' && videos[0]"
+    :video="videos[0]"
+    @play="emit('playBilibili', $event)"
+  />
   <div v-else class="unknown-card"><span>EXTENSION CARD</span><b>{{ kind || 'unknown' }}</b></div>
 </template>
 

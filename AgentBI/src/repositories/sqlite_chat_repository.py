@@ -398,7 +398,12 @@ class SqliteChatRepository:
         if not assistant_id:
             return None
         with self._lock:
-            return self._assistant_document(self._one("SELECT * FROM assistants WHERE id = ? AND user_id = ?", (assistant_id, user_id)))
+            assistant = self._assistant_document(
+                self._one("SELECT * FROM assistants WHERE id = ? AND user_id = ?", (assistant_id, user_id))
+            )
+        if assistant and assistant.get("is_default"):
+            return self.ensure_default_assistant(user_id)
+        return assistant
 
     def create_assistant(self, payload: dict[str, Any]) -> dict[str, Any]:
         assistant_id, now = self._id(), self._time()
