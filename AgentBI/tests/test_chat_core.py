@@ -72,6 +72,34 @@ class ChatCoreTests(unittest.TestCase):
             ],
         )
 
+    def test_timeline_keeps_card_events_between_streamed_text(self):
+        from AgentBI.src.services.chat_service import append_timeline_event
+
+        timeline = []
+        append_timeline_event(timeline, "delta", {"content": "先给你找几首。"})
+        append_timeline_event(
+            timeline,
+            "card",
+            {
+                "kind": "music.track-list",
+                "payload": {"tracks": [{"id": "1", "name": "Song"}]},
+            },
+        )
+        append_timeline_event(timeline, "delta", {"content": "点卡片即可播放。"})
+
+        self.assertEqual(
+            timeline,
+            [
+                {"type": "delta", "content": "先给你找几首。"},
+                {
+                    "type": "card",
+                    "kind": "music.track-list",
+                    "payload": {"tracks": [{"id": "1", "name": "Song"}]},
+                },
+                {"type": "delta", "content": "点卡片即可播放。"},
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

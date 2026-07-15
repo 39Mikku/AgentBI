@@ -2,9 +2,11 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ModelAvatar from '@/components/ModelAvatar.vue'
+import TimelineCard from '@/components/cards/TimelineCard.vue'
 import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { usePlayerStore } from '@/stores/player'
 import { renderMarkdown } from '@/utils/markdown'
 import { shouldRefreshUserProfile } from '@/utils/profile-refresh'
 import { createRuntimeContext } from '@/utils/runtime-context'
@@ -13,6 +15,7 @@ import type { ChatMessage } from '@/api/chat-types'
 const router = useRouter()
 const auth = useAuthStore()
 const chat = useChatStore()
+const player = usePlayerStore()
 const input = ref('')
 const menuOpen = ref(false)
 const assistantMenuOpen = ref(false)
@@ -394,6 +397,11 @@ onMounted(async () => {
                   {{ event.tool || '工具' }} ·
                   {{ event.content || (event.type === 'tool_started' ? '执行中' : '已完成') }}
                 </div>
+                <TimelineCard
+                  v-else-if="event.type === 'card'"
+                  :kind="event.kind"
+                  :payload="event.payload"
+                />
                 <div
                   v-else
                   class="message-content markdown"
@@ -506,6 +514,25 @@ onMounted(async () => {
 
       <footer class="composer-wrap">
         <p v-if="chat.error" class="error-line">{{ chat.error }}</p>
+        <div v-if="player.state.currentTrack" class="player-dock">
+          <div class="player-cover">
+            <img
+              v-if="player.state.currentTrack.cover_url"
+              :src="player.state.currentTrack.cover_url"
+              alt=""
+            /><span v-else>♪</span>
+          </div>
+          <div class="player-copy">
+            <span>NOW {{ player.state.playing ? 'PLAYING' : 'PAUSED' }}</span>
+            <strong>{{ player.state.currentTrack.name }}</strong>
+            <small>{{ player.state.currentTrack.artists.join(' / ') }}</small>
+          </div>
+          <i v-if="player.state.playing" class="dock-wave"><b></b><b></b><b></b><b></b></i>
+          <button @click="player.toggle(player.state.currentTrack)">
+            {{ player.state.playing ? 'Ⅱ' : '▶' }}
+          </button>
+        </div>
+        <p v-if="player.state.error" class="player-error">{{ player.state.error }}</p>
         <div class="composer">
           <textarea
             v-model="input"
@@ -1088,6 +1115,104 @@ onMounted(async () => {
   margin-left: 4px;
   vertical-align: -3px;
   animation: blink 0.8s step-end infinite;
+}
+.player-dock {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto 34px;
+  align-items: center;
+  gap: 11px;
+  width: min(100%, 530px);
+  margin: 0 auto 10px;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid #1b1b1b;
+  background: #1b1b1b;
+  color: #efede5;
+  box-shadow: 4px 4px 0 var(--acid);
+  animation: player-arrive 0.32s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+.player-dock::after {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 18px, rgb(255 255 255 / 0.025) 18px 19px);
+  content: '';
+  pointer-events: none;
+}
+.player-cover {
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--acid);
+  color: #111;
+  font: 20px Georgia;
+}
+.player-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.player-copy {
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+}
+.player-copy span {
+  color: var(--acid);
+  font: 7px 'DM Mono';
+  letter-spacing: 0.16em;
+}
+.player-copy strong,
+.player-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-copy strong {
+  margin-top: 2px;
+  font: 700 11px Manrope;
+}
+.player-copy small {
+  color: #88857e;
+  font: 8px 'DM Mono';
+}
+.player-dock > button {
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #68665f;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--acid);
+  cursor: pointer;
+}
+.dock-wave {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 18px;
+}
+.dock-wave b {
+  width: 2px;
+  height: 6px;
+  background: var(--acid);
+  animation: dock-meter 0.7s ease-in-out infinite alternate;
+}
+.dock-wave b:nth-child(2) { animation-delay: -0.45s; }
+.dock-wave b:nth-child(3) { animation-delay: -0.2s; }
+.dock-wave b:nth-child(4) { animation-delay: -0.6s; }
+.player-error {
+  width: min(100%, 530px);
+  margin: 0 auto 8px;
+  color: #a33e34;
+  font: 8px 'DM Mono';
+}
+@keyframes dock-meter { to { height: 18px; } }
+@keyframes player-arrive {
+  from { opacity: 0; transform: translateY(8px); }
 }
 .composer-wrap {
   padding: 0 clamp(24px, 8vw, 130px) 22px;

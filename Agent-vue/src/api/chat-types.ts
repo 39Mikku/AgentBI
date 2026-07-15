@@ -82,9 +82,11 @@ export interface ChatMessage {
 }
 
 export interface ChatTimelineEvent {
-  type: 'delta' | 'reasoning_summary' | 'tool_started' | 'tool_finished'
+  type: 'delta' | 'reasoning_summary' | 'tool_started' | 'tool_finished' | 'card'
   content?: string
   tool?: string
+  kind?: string
+  payload?: Record<string, unknown>
 }
 
 export interface ChatPreferences {
@@ -102,7 +104,7 @@ export interface ChatRuntimeContext {
 
 export interface ChatStreamEvent {
   event: string
-  data: Record<string, string>
+  data: Record<string, any>
 }
 
 export type ChatGenerationPayload = {

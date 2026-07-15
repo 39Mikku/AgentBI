@@ -13,6 +13,8 @@ from AgentBI.src.logging.logging import Logger
 from AgentBI.src.schemas.chat_schema import ChatEditStreamRequest, ChatRetryStreamRequest, ChatStreamRequest
 from AgentBI.src.services.chat_service import append_timeline_event, encode_sse_event, format_model_error
 from AgentBI.src.services.memory_service import MemoryService, build_context_bundle
+from AgentBI.src.api.music import get_music_client
+from AgentBI.src.services.netease_music_client import NeteaseMusicClient
 
 router = APIRouter(tags=["chat"])
 logger = Logger.get_logger(__name__)
@@ -111,6 +113,7 @@ def stream_assistant(
     memory_service: MemoryService,
     memory_summary: str | None = None,
     context_summary: str | None = None,
+    music_client: NeteaseMusicClient | None = None,
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -133,6 +136,7 @@ def stream_assistant(
                 memory_summary,
                 context_summary,
                 conversation_id,
+                music_client,
             ).stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
@@ -147,6 +151,9 @@ def stream_assistant(
                     tool_events.append(event)
                     append_timeline_event(timeline, event_type, event)
                     yield encode_sse_event(event_type, event)
+                elif event_type == "card":
+                    append_timeline_event(timeline, event_type, event)
+                    yield encode_sse_event("card", event)
             message = repository.complete_assistant_message(
                 str(assistant_message["_id"]),
                 "".join(answer) or "工具任务已执行完成。",
@@ -223,6 +230,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             memory_service,
             memory_service.core_memory(payload.user_id, assistant),
             bundle["summary"],
+            get_music_client(request),
         ),
         media_type="text/event-stream",
     )
@@ -269,6 +277,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             memory_service,
             memory_service.core_memory(payload.user_id, assistant),
             bundle["summary"],
+            get_music_client(request),
         ),
         media_type="text/event-stream",
     )
@@ -307,6 +316,7 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             memory_service,
             memory_service.core_memory(payload.user_id, assistant),
             bundle["summary"],
+            get_music_client(request),
         ),
         media_type="text/event-stream",
     )

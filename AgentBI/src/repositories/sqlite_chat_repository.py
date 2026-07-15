@@ -367,6 +367,16 @@ class SqliteChatRepository:
         with self._lock:
             existing = self._assistant_document(self._one("SELECT * FROM assistants WHERE user_id = ? AND is_default = 1", (user_id,)))
         if existing:
+            merged_capabilities = list(
+                dict.fromkeys([*existing.get("capability_ids", []), *DEFAULT_ASSISTANT_CAPABILITIES])
+            )
+            if merged_capabilities != existing.get("capability_ids", []):
+                with self._lock, self._connection:
+                    self._connection.execute(
+                        "UPDATE assistants SET capability_ids = ?, updated_at = ? WHERE id = ?",
+                        (self._json_dump(merged_capabilities), self._time(), existing["_id"]),
+                    )
+                existing["capability_ids"] = merged_capabilities
             return existing
         assistant_id, now = self._id(), self._time()
         with self._lock, self._connection:

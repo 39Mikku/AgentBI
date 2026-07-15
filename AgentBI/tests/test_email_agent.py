@@ -20,7 +20,8 @@ class EmailAgentTests(unittest.TestCase):
         from AgentBI.src.agents.chat_agent import ChatAgent
 
         names = {tool["function"]["name"] for tool in ChatAgent.tool_definitions()}
-        self.assertEqual(names, {"delegate_email"})
+        self.assertIn("delegate_email", names)
+        self.assertNotIn("send_email", names)
 
 
 if __name__ == "__main__":

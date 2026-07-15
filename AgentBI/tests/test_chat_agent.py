@@ -2,11 +2,32 @@ import unittest
 
 
 class ChatAgentTests(unittest.TestCase):
-    def test_chat_agent_exposes_only_email_delegation(self):
+    def test_default_chat_agent_exposes_registered_subagent_delegations(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
 
         names = {tool["function"]["name"] for tool in ChatAgent.tool_definitions()}
-        self.assertEqual(names, {"delegate_email"})
+        self.assertEqual(names, {"delegate_email", "delegate_music"})
+
+    def test_music_delegation_is_exposed_only_when_capability_is_mounted(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        disabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions(["agent.email"])}
+        enabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions(["agent.music"])}
+
+        self.assertEqual(disabled, {"delegate_email"})
+        self.assertEqual(enabled, {"delegate_music"})
+
+    def test_subagents_are_resolved_from_one_registry(self):
+        from AgentBI.src.agents.assistant_registry import create_subagent, get_subagent_registration
+        from AgentBI.src.agents.email_agent import EmailAgent
+        from AgentBI.src.agents.music_agent import MusicAgent
+
+        music_registration = get_subagent_registration("delegate_music")
+
+        self.assertEqual(music_registration.display_name, "音乐子代理")
+        self.assertIsInstance(create_subagent("delegate_music", music_client=object()), MusicAgent)
+        self.assertIsInstance(create_subagent("delegate_email", repository=object()), EmailAgent)
+        self.assertIsNone(create_subagent("delegate_unknown"))
 
     def test_email_delegation_description_leaves_recipient_lookup_to_the_subagent(self):
         from AgentBI.src.agents.chat_agent import ChatAgent

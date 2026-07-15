@@ -1,7 +1,7 @@
 # AgentBI 开发总览
 
 > 更新日期：2026-07-15
-> 当前阶段：本地 SQLite 驱动的聊天工作台、消息 DAG、助手记忆/历史检索/上下文压缩与后台模型路由已落地。
+> 当前阶段：本地 SQLite 驱动的聊天工作台、消息 DAG、助手记忆/历史检索/上下文压缩、后台模型路由与网易云音乐子代理已落地。
 
 ## 1. 当前架构
 
@@ -16,11 +16,16 @@ flowchart LR
   Tasks --> LLM
   Memory --> Repo
   Chat -->|delegate_email| MailAgent[EmailAgent]
+  Chat -->|delegate_music| MusicAgent[MusicAgent]
   Chat -->|search_assistant_history| Memory
   Chat --> LLM[OpenAI-compatible Provider]
   MailAgent --> Lookup[lookup_recipient]
   Lookup --> Repo
   MailAgent --> SMTP[send_email / SMTP]
+  MusicAgent --> MusicClient[NeteaseMusicClient]
+  MusicClient --> Node[内置 Enhanced API / Node]
+  Node --> NCM[网易云音乐]
+  MusicAgent -->|card SSE| UI
   API --> Login[LoginService]
   Login --> Repo
   Login --> SMTP
@@ -28,29 +33,30 @@ flowchart LR
 
 - 浏览器只访问 FastAPI；模型 API Key 与 SMTP 配置仅由后端使用。
 - `SqliteChatRepository` 是当前唯一的业务持久化边界：用户、验证码、提供商、偏好、助手、会话、消息 DAG 与运行记录均保存在 SQLite。
-- `ChatAgent` 固定保留 `delegate_email`，并仅在助手启用历史检索时暴露 `search_assistant_history`。后者由模型按需调用，不会逐轮强制检索。
+- `ChatAgent` 只暴露已挂载能力的委派入口，例如 `delegate_email`、`delegate_music`；并仅在助手启用历史检索时暴露 `search_assistant_history`。后者由模型按需调用，不会逐轮强制检索。
 - `MemoryService` 负责助手核心记忆、历史向量索引、上下文压缩与首轮标题；`ModelTaskService` 复用提供商配置执行四类后台模型任务。
-- 流式调用使用 OpenAI-compatible Chat Completions；SSE 事件按真实发生顺序写入消息时间线。
+- 流式调用使用 OpenAI-compatible Chat Completions；正文、推理摘要、工具和通用 `card` SSE 事件按真实发生顺序写入消息时间线。
 
 ## 2. 目录与模块
 
 ```text
 Agent-vue/
   src/api/             REST 与 SSE 客户端、类型
-  src/stores/          登录态、聊天态、持久化偏好
+  src/stores/          登录态、聊天态、共享播放器、持久化偏好
   src/views/           首页、登录、聊天、配置、助手管理
-  src/components/      模型头像与通用界面组件
+  src/components/      模型头像、音乐卡片与通用界面组件
 
 AgentBI/
-  main.py              FastAPI 生命周期与 SQLite 初始化
+  main.py              FastAPI 生命周期、SQLite 与内置 Node 子进程初始化
   data/agentbi.sqlite3 本地开发数据库（运行时生成，未纳入 Git）
   src/api/             登录、资料、聊天、会话、提供商、助手路由
   src/repositories/    SQLite 数据访问实现
-  src/services/        LoginService、上下文/记忆、后台模型任务、SSE、模型发现
-  src/agents/          ChatAgent、EmailAgent、助手能力注册
-  src/tools/           SMTP 邮件原子能力
+  src/services/        LoginService、上下文/记忆、后台模型任务、SSE、模型发现、音乐 API 客户端与进程管理
+  src/agents/          ChatAgent、EmailAgent、MusicAgent、助手能力注册
+  src/tools/           SMTP 邮件与网易云音乐原子能力
   src/schemas/         Pydantic 请求/响应模型
   tests/               unittest 回归测试
+  vendor/netease-music-api/  固定版本 Enhanced API 包装器与 npm lock
 ```
 
 ## 3. 本地数据模型
@@ -83,7 +89,8 @@ AgentBI/
 - 历史会话 RAG：同助手消息经 OpenAI-compatible Embeddings 建立索引；仅在模型主动调用工具时执行语义检索，并排除当前会话。
 - 自动标题：首轮用户与助手消息完成后，由独立轻量模型生成标题，不再截取用户原文作为会话名。
 - 邮件子代理：主代理委派后，子代理仅可查询 SQLite 中的收件人并调用 SMTP 发送，不再直接访问 MongoDB 或通用查询工具。
-- 前端体验：流式正文/推理摘要、按时间线交错的工具事件、模型头像、个人头像与本地偏好恢复。
+- 音乐子代理：固定 Cookie 模式下支持歌曲搜索、每日推荐与精确点播；Node 服务随 FastAPI 无感启停，失败时仅降级音乐能力。歌曲卡片持久化稳定元数据，播放时经 `/music/tracks/{id}/stream` 即时解析 URL。
+- 前端体验：流式正文/推理摘要、按时间线交错的工具与卡片事件、共享音乐播放器、模型头像、个人头像与本地偏好恢复。
 
 ## 5. 已移除的开发期依赖
 
@@ -95,7 +102,7 @@ AgentBI/
 
 ## 6. 后续方向
 
-1. AgentRegistry：将邮件、Office、数据库、媒体等子代理统一注册，提供能力元数据、输入/输出契约与可观测性。
+1. AgentRegistry：在现有统一注册与延迟工厂基础上，继续补齐 Office、数据库、媒体等子代理的输入/输出契约、生命周期依赖与可观测性。
 2. Playground / Live：复用会话 DAG、角色与提示词模块化能力，分别承载 RP 场景和实时语音模型。
 3. 本地优先同步：保留 `SqliteChatRepository` 作为接口边界；需要云同步时实现新的 repository，而不是让 API 层直接耦合数据库。
 4. 生产化：加密 provider key、认证与权限、审计、模型调用限流、后台任务与备份/迁移。
@@ -106,6 +113,7 @@ AgentBI/
 
 ```powershell
 # 后端（项目根目录）
+npm install --prefix AgentBI/vendor/netease-music-api
 .\venv\python.exe -m uvicorn AgentBI.main:app --reload
 
 # 前端
@@ -121,3 +129,5 @@ cd Agent-vue
 npm run type-check
 npm run build
 ```
+
+网易云音乐配置位于 `AgentBI/.env`：复制 `.env.example` 后填写 `NCM_COOKIE`。Cookie 只由 Python 内部客户端作为请求头发送，不写入 SQLite、SSE 或前端；失效时更新该值并重启后端。可用 `NCM_AUDIO_LEVEL` 调整音质等级，默认 `standard`。

@@ -11,6 +11,7 @@ import type {
   Conversation,
 } from '@/api/chat-types'
 import { replaceTimelineBranch } from '@/utils/message-branch'
+import { toTimelineCard } from '@/utils/card-events'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -309,6 +310,10 @@ export const useChatStore = defineStore('chat', () => {
         tool: event.data.tool || '工具',
         content: event.data.content,
       })
+    }
+    if (event.event === 'card') {
+      const card = toTimelineCard(event.data)
+      if (card) appendTimeline(temporary, card)
     }
     if (event.event === 'error') {
       temporary.status = 'error'

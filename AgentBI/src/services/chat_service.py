@@ -37,6 +37,15 @@ def append_timeline_event(timeline: list[dict[str, Any]], event_type: str, event
         if content:
             entry["content"] = content
         timeline.append(entry)
+        return
+    if event_type == "card" and isinstance(event.get("kind"), str) and isinstance(event.get("payload"), dict):
+        timeline.append(
+            {
+                "type": "card",
+                "kind": event["kind"],
+                "payload": event["payload"],
+            }
+        )
 
 
 def format_model_error(error: Exception) -> str:
