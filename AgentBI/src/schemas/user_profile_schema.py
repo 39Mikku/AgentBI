@@ -7,6 +7,10 @@ class UserAvatarUpdate(BaseModel):
     avatar_data_url: str = Field(min_length=24, max_length=2_000_000, pattern=r"^data:image/(png|jpeg|webp|gif);base64,")
 
 
+class UserNameUpdate(BaseModel):
+    username: str = Field(min_length=1, max_length=64, pattern=r".*\S.*")
+
+
 class UserProfileResponse(BaseModel):
     user_id: str
     username: str

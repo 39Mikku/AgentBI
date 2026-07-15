@@ -19,5 +19,12 @@ export interface LoginParams {
   code: string
 }
 
+export interface LoginResult {
+  user_id: string
+  username: string
+  email: string
+  avatar_data_url?: string | null
+}
+
 /** 业务约定：code === 200 视为成功 */
 export const OK = 200

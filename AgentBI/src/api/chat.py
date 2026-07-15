@@ -117,7 +117,12 @@ def stream_assistant(
             build_message_start_payload(conversation_id, assistant_message, conversation_title),
         )
         try:
-            async for event in ChatAgent(assistant.get("system_prompt"), assistant.get("capability_ids", []), assistant.get("include_runtime_context", True)).stream(context, provider, model, temperature, runtime_context):
+            async for event in ChatAgent(
+                assistant.get("system_prompt"),
+                assistant.get("capability_ids", []),
+                assistant.get("include_runtime_context", True),
+                repository,
+            ).stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
                     answer.append(event["content"])

@@ -60,14 +60,14 @@ class ChatCoreTests(unittest.TestCase):
 
         timeline = []
         append_timeline_event(timeline, "delta", {"content": "先说明。"})
-        append_timeline_event(timeline, "tool_started", {"tool": "mongo_query"})
+        append_timeline_event(timeline, "tool_started", {"tool": "lookup_recipient"})
         append_timeline_event(timeline, "delta", {"content": "再汇报。"})
 
         self.assertEqual(
             timeline,
             [
                 {"type": "delta", "content": "先说明。"},
-                {"type": "tool_started", "tool": "mongo_query"},
+                {"type": "tool_started", "tool": "lookup_recipient"},
                 {"type": "delta", "content": "再汇报。"},
             ],
         )

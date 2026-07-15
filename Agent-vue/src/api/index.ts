@@ -5,7 +5,7 @@
  * to avoid CORS during development. In production, configure the reverse proxy
  * to strip the /api prefix before forwarding to the FastAPI backend.
  */
-import type { ApiResponse, LoginParams, SendCodeParams } from './types'
+import type { ApiResponse, LoginParams, LoginResult, SendCodeParams } from './types'
 import { OK } from './types'
 
 const BASE = '/api'
@@ -49,8 +49,8 @@ export async function sendCode(params: SendCodeParams): Promise<ApiResponse> {
 }
 
 /** 校验邮箱 + 验证码，完成登录 */
-export async function login(params: LoginParams): Promise<ApiResponse> {
-  const resp = await request('/login', { email: params.email, code: params.code })
+export async function login(params: LoginParams): Promise<ApiResponse<LoginResult>> {
+  const resp = await request<LoginResult>('/login', { email: params.email, code: params.code })
   if (resp.code !== OK) {
     throw new ApiError(resp.code, resp.msg || '登录失败')
   }

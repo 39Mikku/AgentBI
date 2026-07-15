@@ -103,13 +103,20 @@ export const useAuthStore = defineStore('auth', () => {
     logging.value = true
     try {
       const resp = await api.login({ email: email.value.trim(), code: code.value.trim() })
+      if (!resp.data) throw new ApiError(500, '登录响应缺少用户资料')
+      const user = resp.data
       isAuthenticated.value = true
+      email.value = user.user_id
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, '1')
-        localStorage.setItem(USER_STORAGE_KEY, email.value.trim())
-        localStorage.removeItem(PROFILE_STORAGE_KEY)
+        localStorage.setItem(USER_STORAGE_KEY, user.user_id)
       }
-      profile.value = null
+      setProfile({
+        user_id: user.user_id,
+        username: user.username,
+        email: user.email,
+        avatar_data_url: user.avatar_data_url ?? null,
+      })
       notifySuccess(resp.msg || '登录成功')
     } catch (e) {
       notifyError(e instanceof ApiError ? e.message : '登录失败')

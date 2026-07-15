@@ -21,3 +21,10 @@ export const saveUserAvatar = (userId: string, avatarDataUrl: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ avatar_data_url: avatarDataUrl }),
   })
+
+export const saveUserName = (userId: string, username: string) =>
+  json<UserProfile>(`/user-profile?user_id=${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  })

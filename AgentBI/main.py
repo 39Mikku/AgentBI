@@ -5,7 +5,6 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
-from AgentBI.src.agents.login_agent import LoginAgent
 from AgentBI.src.api.api import router
 from AgentBI.src.api.chat import router as chat_router
 from AgentBI.src.api.conversations import router as conversation_router
@@ -14,21 +13,17 @@ from AgentBI.src.api.user_profile import router as user_profile_router
 from AgentBI.src.api.assistants import router as assistant_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
-from AgentBI.src.services.user_directory import MongoUserDirectory
 
 logger = Logger.get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.login_agent = LoginAgent()
     sqlite_path = os.getenv("CHAT_SQLITE_PATH") or str(Path(__file__).resolve().parent / "data" / "agentbi.sqlite3")
     app.state.chat_repository = SqliteChatRepository(sqlite_path)
-    app.state.user_directory = MongoUserDirectory(os.getenv("MONGO_URI"), os.getenv("MONGO_DATABASE", "chat_bi"))
     logger.info("创建 AgentBI 服务生命周期")
     yield
     app.state.chat_repository.close()
-    app.state.user_directory.close()
     logger.info("销毁 AgentBI 服务生命周期")
 
 

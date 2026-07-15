@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -45,8 +45,14 @@ class SqliteChatRepository:
                     user_id TEXT PRIMARY KEY, provider_id TEXT, model TEXT, temperature REAL NOT NULL,
                     context_turns INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS user_profiles (
-                    user_id TEXT PRIMARY KEY, avatar_data_url TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE,
+                    avatar_data_url TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS users_username_nocase ON users(username COLLATE NOCASE);
+                CREATE TABLE IF NOT EXISTS login_codes (
+                    identity TEXT PRIMARY KEY, code TEXT NOT NULL, target_email TEXT NOT NULL,
+                    expires_at TEXT NOT NULL, created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS assistants (
                     id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, system_prompt TEXT NOT NULL,
@@ -157,6 +163,14 @@ class SqliteChatRepository:
         item["updated_at"] = self._parse_time(item["updated_at"])
         return item
 
+    def _user_document(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if not row:
+            return None
+        item = dict(row)
+        item["created_at"] = self._parse_time(item["created_at"])
+        item["updated_at"] = self._parse_time(item["updated_at"])
+        return item
+
     # Provider, preference, and profile persistence ---------------------------------
 
     def create_provider(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -215,20 +229,65 @@ class SqliteChatRepository:
             )
         return self.get_preferences(user_id)
 
-    def get_user_profile(self, user_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    def find_user(self, identity: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._one("SELECT * FROM user_profiles WHERE user_id = ?", (user_id,))
-        return None, dict(row) if row else None
+            row = self._one("SELECT * FROM users WHERE email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE", (identity.strip(), identity.strip()))
+        return self._user_document(row)
 
-    def save_user_avatar(self, user_id: str, avatar_data_url: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    def create_user(self, email: str, username: str | None = None) -> dict[str, Any]:
+        normalized_email = email.strip().lower()
+        existing = self.find_user(normalized_email)
+        if existing:
+            return existing
+        base = (username or normalized_email.split("@", 1)[0]).strip() or "user"
+        candidate, suffix = base, 2
+        with self._lock:
+            while self._one("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE", (candidate,)):
+                candidate = f"{base}-{suffix}"
+                suffix += 1
         now = self._time()
         with self._lock, self._connection:
+            self._connection.execute("INSERT INTO users VALUES (?, ?, ?, NULL, ?, ?)", (normalized_email, candidate, normalized_email, now, now))
+        return self.find_user(normalized_email)  # type: ignore[return-value]
+
+    def update_user(self, user_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
+        allowed = {"username", "avatar_data_url"}
+        values = {key: value for key, value in fields.items() if key in allowed}
+        if not values:
+            return self.find_user(user_id)
+        assignments = [f"{key} = ?" for key in values]
+        params = [*values.values(), self._time(), user_id]
+        with self._lock, self._connection:
+            self._connection.execute(f"UPDATE users SET {', '.join(assignments)}, updated_at = ? WHERE user_id = ?", tuple(params))
+        return self.find_user(user_id)
+
+    def create_login_code(self, identity: str, code: str, target_email: str, expires_seconds: int = 300) -> None:
+        now = utc_now()
+        with self._lock, self._connection:
             self._connection.execute(
-                """INSERT INTO user_profiles(user_id, avatar_data_url, created_at, updated_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET avatar_data_url=excluded.avatar_data_url, updated_at=excluded.updated_at""",
-                (user_id, avatar_data_url, now, now),
+                """INSERT INTO login_codes(identity, code, target_email, expires_at, created_at) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(identity) DO UPDATE SET code=excluded.code, target_email=excluded.target_email,
+                expires_at=excluded.expires_at, created_at=excluded.created_at""",
+                (identity.strip(), code, target_email, self._time(now + timedelta(seconds=expires_seconds)), self._time(now)),
             )
-        return self.get_user_profile(user_id)
+
+    def consume_login_code(self, identity: str, code: str) -> dict[str, str] | None:
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute("DELETE FROM login_codes WHERE expires_at <= ?", (now,))
+            row = self._one("SELECT identity, target_email FROM login_codes WHERE identity = ? AND code = ?", (identity.strip(), code.strip()))
+            if not row:
+                return None
+            self._connection.execute("DELETE FROM login_codes WHERE identity = ?", (identity.strip(),))
+        return dict(row)
+
+    def get_user_profile(self, user_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        user = self.find_user(user_id)
+        return user, user
+
+    def save_user_avatar(self, user_id: str, avatar_data_url: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        user = self.update_user(user_id, {"avatar_data_url": avatar_data_url})
+        return user, user
 
     # Thread and DAG persistence ----------------------------------------------------
 

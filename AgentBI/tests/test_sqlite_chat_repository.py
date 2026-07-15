@@ -35,11 +35,26 @@ class SqliteChatRepositoryTests(unittest.TestCase):
         )
         updated = self.repository.update_provider(provider["_id"], {"available_models": ["demo", "demo-reasoner"]})
         self.repository.save_preferences("local-user", {"provider_id": provider["_id"], "model": "demo", "temperature": 0.4, "context_turns": 16})
-        _, profile = self.repository.save_user_avatar("local-user", "data:image/png;base64,AA==")
+        user = self.repository.create_user("local-user@example.com")
+        _, profile = self.repository.save_user_avatar(user["user_id"], "data:image/png;base64,AA==")
 
         self.assertEqual(updated["available_models"], ["demo", "demo-reasoner"])
         self.assertEqual(self.repository.get_preferences("local-user")["context_turns"], 16)
         self.assertEqual(profile["avatar_data_url"], "data:image/png;base64,AA==")
+
+    def test_local_user_profile_and_login_code_are_persisted_without_mongo(self):
+        user = self.repository.create_user("elysi@example.com")
+        updated = self.repository.update_user(user["user_id"], {"username": "elysi", "avatar_data_url": "data:image/png;base64,AA=="})
+        self.repository.create_login_code("elysi", "123456", user["email"])
+
+        consumed = self.repository.consume_login_code("elysi", "123456")
+
+        self.assertEqual(updated["username"], "elysi")
+        self.assertEqual(self.repository.find_user("elysi")["avatar_data_url"], "data:image/png;base64,AA==")
+        self.assertEqual(self.repository.update_user(user["user_id"], {"username": "elysi-renamed"})["username"], "elysi-renamed")
+        self.assertEqual(self.repository.find_user("elysi-renamed")["email"], "elysi@example.com")
+        self.assertEqual(consumed["target_email"], "elysi@example.com")
+        self.assertIsNone(self.repository.consume_login_code("elysi", "123456"))
 
     def test_edit_and_retry_create_selectable_message_versions(self):
         user = self.repository.create_user_message(self.thread["_id"], "local-user", "Original")
@@ -73,10 +88,9 @@ class SqliteChatRepositoryTests(unittest.TestCase):
             database_path = str(Path(directory) / "agentbi.sqlite3")
 
             async def start_application():
-                with patch("AgentBI.main.LoginAgent"):
-                    async with lifespan(app):
-                        self.assertIsInstance(app.state.chat_repository, SqliteChatRepository)
-                        self.assertEqual(app.state.chat_repository.path, database_path)
+                async with lifespan(app):
+                    self.assertIsInstance(app.state.chat_repository, SqliteChatRepository)
+                    self.assertEqual(app.state.chat_repository.path, database_path)
 
             with patch.dict(os.environ, {"MONGO_URI": "", "CHAT_SQLITE_PATH": database_path}, clear=False):
                 asyncio.run(start_application())
