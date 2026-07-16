@@ -34,13 +34,26 @@ class SqliteChatRepositoryTests(unittest.TestCase):
             {"name": "Local", "base_url": "https://example.test/v1", "api_key": "key", "default_model": "demo"}
         )
         updated = self.repository.update_provider(provider["_id"], {"available_models": ["demo", "demo-reasoner"]})
-        self.repository.save_preferences("local-user", {"provider_id": provider["_id"], "model": "demo", "temperature": 0.4, "context_turns": 16})
+        self.repository.save_preferences(
+            "local-user",
+            {
+                "provider_id": provider["_id"],
+                "model": "demo",
+                "temperature": 0.4,
+                "context_turns": 16,
+                "thinking_level": "high",
+            },
+        )
         user = self.repository.create_user("local-user@example.com")
         _, profile = self.repository.save_user_avatar(user["user_id"], "data:image/png;base64,AA==")
 
         self.assertEqual(updated["available_models"], ["demo", "demo-reasoner"])
         self.assertEqual(self.repository.get_preferences("local-user")["context_turns"], 16)
+        self.assertEqual(self.repository.get_preferences("local-user")["thinking_level"], "high")
         self.assertEqual(profile["avatar_data_url"], "data:image/png;base64,AA==")
+
+    def test_chat_preferences_default_to_medium_thinking(self):
+        self.assertEqual(self.repository.get_preferences("new-user")["thinking_level"], "medium")
 
     def test_local_user_profile_and_login_code_are_persisted_without_mongo(self):
         user = self.repository.create_user("elysi@example.com")

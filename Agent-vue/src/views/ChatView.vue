@@ -17,7 +17,8 @@ import { renderMarkdown } from '@/utils/markdown'
 import { shouldRefreshUserProfile } from '@/utils/profile-refresh'
 import { createRuntimeContext } from '@/utils/runtime-context'
 import { copyMarkdown } from '@/utils/clipboard'
-import type { ChatMessage, StudioAsset } from '@/api/chat-types'
+import { isGeminiThinkingModel, renderReasoningMarkdown } from '@/utils/gemini-thinking'
+import type { ChatMessage, ChatPreferences, StudioAsset } from '@/api/chat-types'
 import type { BilibiliVideo } from '@/utils/bilibili-player'
 
 const router = useRouter()
@@ -44,6 +45,12 @@ const previewTurn = ref(-1)
 const activeBilibiliVideo = ref<BilibiliVideo | null>(null)
 const userId = computed(() => auth.email || 'local-user')
 const modelLabel = computed(() => chat.preferences.model || '选择模型')
+const showThinkingControl = computed(() => isGeminiThinkingModel(chat.preferences.model))
+const thinkingLevels: Array<{ value: ChatPreferences['thinkingLevel']; label: string }> = [
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+]
 const userName = computed(
   () =>
     profile.value?.username ||
@@ -434,7 +441,10 @@ onMounted(async () => {
               <template v-for="(event, index) in message.timeline" :key="index">
                 <details v-if="event.type === 'reasoning_summary'" class="reasoning">
                   <summary>推理摘要</summary>
-                  <p>{{ event.content }}</p>
+                  <div
+                    class="reasoning-markdown markdown"
+                    v-html="renderReasoningMarkdown(event.content || '')"
+                  ></div>
                 </details>
                 <ToolEventDetails
                   v-else-if="event.type === 'tool_started' || event.type === 'tool_finished'"
@@ -462,7 +472,10 @@ onMounted(async () => {
             <template v-else>
               <details v-if="message.reasoning_summary" class="reasoning">
                 <summary>推理摘要</summary>
-                <p>{{ message.reasoning_summary }}</p>
+                <div
+                  class="reasoning-markdown markdown"
+                  v-html="renderReasoningMarkdown(message.reasoning_summary)"
+                ></div>
               </details>
               <ToolEventDetails
                 v-for="(event, index) in message.tool_events"
@@ -600,8 +613,28 @@ onMounted(async () => {
             @keydown="keydown"
           ></textarea>
           <div class="composer-actions">
-            <span>Shift ↵ 换行</span
-            ><button v-if="chat.activeGenerating" class="stop" @click="chat.stop">■ 停止</button
+            <div class="composer-meta">
+              <div
+                v-if="showThinkingControl"
+                class="thinking-control"
+                role="group"
+                aria-label="Gemini 推理强度"
+              >
+                <span>THINK</span>
+                <button
+                  v-for="option in thinkingLevels"
+                  :key="option.value"
+                  type="button"
+                  :class="{ active: chat.preferences.thinkingLevel === option.value }"
+                  :aria-pressed="chat.preferences.thinkingLevel === option.value"
+                  @click="chat.preferences.thinkingLevel = option.value"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+              <span class="composer-hint">Shift ↵ 换行</span>
+            </div>
+            <button v-if="chat.activeGenerating" class="stop" @click="chat.stop">■ 停止</button
             ><button
               v-else
               class="send"
@@ -1211,6 +1244,27 @@ onMounted(async () => {
 .reasoning p {
   margin: 6px 0 0;
 }
+.reasoning-markdown {
+  margin-top: 8px;
+  font: 11px/1.7 'DM Mono';
+  color: #666;
+}
+.reasoning-markdown :deep(p) {
+  margin: 5px 0 0;
+}
+.reasoning-markdown :deep(h1),
+.reasoning-markdown :deep(h2),
+.reasoning-markdown :deep(h3) {
+  margin: 11px 0 4px;
+  color: #1d1d1b;
+  font: 700 11px/1.4 Manrope;
+  letter-spacing: 0.02em;
+}
+.reasoning-markdown :deep(h1:first-child),
+.reasoning-markdown :deep(h2:first-child),
+.reasoning-markdown :deep(h3:first-child) {
+  margin-top: 2px;
+}
 .cursor {
   display: inline-block;
   width: 7px;
@@ -1351,6 +1405,44 @@ textarea {
   margin-top: 9px;
   color: #8b8983;
   font: 9px 'DM Mono';
+}
+.composer-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.thinking-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(27, 27, 27, 0.2);
+  background: #f1efe9;
+}
+.thinking-control > span {
+  padding: 0 5px;
+  color: #5d5b55;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.thinking-control button {
+  min-width: 25px;
+  border: 0;
+  padding: 4px 6px;
+  background: transparent;
+  color: #77746c;
+  cursor: pointer;
+  font: 700 9px 'DM Mono';
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+.thinking-control button:hover {
+  color: #111;
+}
+.thinking-control button.active {
+  background: #1b1b1b;
+  color: var(--acid);
+  transform: translateY(-1px);
 }
 .send,
 .stop {
@@ -1590,6 +1682,9 @@ textarea {
   }
   .composer-wrap {
     padding: 0 22px 20px;
+  }
+  .composer-hint {
+    display: none;
   }
   .prompt-grid {
     grid-template-columns: 1fr;

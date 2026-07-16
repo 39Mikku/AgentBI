@@ -23,6 +23,7 @@ from AgentBI.src.schemas.capability_settings_schema import resolve_capability_co
 from AgentBI.src.services.tavily_search_client import TavilySearchClient
 from AgentBI.src.tools.web_search_tools import search_web
 from AgentBI.src.services.image_generation.service import ImageGenerationService
+from AgentBI.src.services.gemini_thinking import gemini_request_options
 from AgentBI.src.tools.image_generation_tools import AtomicToolResult, generate_image
 
 
@@ -113,6 +114,7 @@ class ChatAgent:
         provider: dict[str, Any],
         model: str,
         temperature: float,
+        thinking_level: str = "medium",
         runtime_context: dict[str, str] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         client = AsyncOpenAI(
@@ -121,7 +123,9 @@ class ChatAgent:
             default_headers=self.client_headers(),
         )
         request_messages = self.build_request_messages(messages, runtime_context or {})
-        async for event in self._stream_tool_loop(client, request_messages, model, temperature, provider):
+        async for event in self._stream_tool_loop(
+            client, request_messages, model, temperature, provider, thinking_level
+        ):
             yield event
 
     def build_request_messages(
@@ -154,11 +158,13 @@ class ChatAgent:
         model: str,
         temperature: float,
         provider: dict[str, Any],
+        thinking_level: str = "medium",
     ) -> AsyncIterator[dict[str, Any]]:
         for _ in range(4):
             content_parts: list[str] = []
             tool_calls: dict[int, dict[str, str]] = {}
             request: dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature, "stream": True}
+            request.update(gemini_request_options(model, thinking_level))
             if tools := self.tool_definitions(
                 self.capability_ids,
                 bool(self.assistant.get("history_search_enabled")),

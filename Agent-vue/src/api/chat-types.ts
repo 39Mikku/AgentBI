@@ -138,6 +138,7 @@ export interface ChatPreferences {
   model?: string
   temperature: number
   contextTurns: number
+  thinkingLevel: 'low' | 'medium' | 'high'
 }
 
 export interface ChatRuntimeContext {

@@ -29,7 +29,11 @@ export const useChatStore = defineStore('chat', () => {
   const generationTracker = new ConversationGenerationTracker()
   const syncMessage = ref('')
   const error = ref('')
-  const preferences = ref<ChatPreferences>({ temperature: 0.7, contextTurns: 8 })
+  const preferences = ref<ChatPreferences>({
+    temperature: 0.7,
+    contextTurns: 8,
+    thinkingLevel: 'medium',
+  })
   let controller: AbortController | null = null
   let currentUserId = ''
   let preferenceTimer: ReturnType<typeof setTimeout> | null = null
@@ -135,6 +139,7 @@ export const useChatStore = defineStore('chat', () => {
             model: target.model || undefined,
             temperature: target.temperature,
             contextTurns: target.context_turns,
+            thinkingLevel: preferences.value.thinkingLevel,
           }
         }
         await select(target.id, userId)

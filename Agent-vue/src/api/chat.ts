@@ -31,6 +31,7 @@ type StoredPreferences = {
   model?: string | null
   temperature: number
   context_turns: number
+  thinking_level: 'low' | 'medium' | 'high'
 }
 
 export async function getPreferences(userId: string): Promise<ChatPreferences> {
@@ -40,6 +41,7 @@ export async function getPreferences(userId: string): Promise<ChatPreferences> {
     model: preferences.model || undefined,
     temperature: preferences.temperature,
     contextTurns: preferences.context_turns,
+    thinkingLevel: preferences.thinking_level || 'medium',
   }
 }
 
@@ -52,6 +54,7 @@ export const savePreferences = (userId: string, preferences: ChatPreferences) =>
       model: preferences.model || null,
       temperature: preferences.temperature,
       context_turns: preferences.contextTurns,
+      thinking_level: preferences.thinkingLevel,
     }),
   })
 
@@ -60,6 +63,7 @@ function streamBody(payload: ChatGenerationPayload | (MessageGenerationPayload &
     ...payload,
     provider_id: payload.providerId,
     context_turns: payload.contextTurns,
+    thinking_level: payload.thinkingLevel,
     user_name: payload.userName,
   }
 }

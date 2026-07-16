@@ -55,7 +55,8 @@ class SqliteChatRepository:
                 );
                 CREATE TABLE IF NOT EXISTS chat_preferences (
                     user_id TEXT PRIMARY KEY, provider_id TEXT, model TEXT, temperature REAL NOT NULL,
-                    context_turns INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                    context_turns INTEGER NOT NULL, thinking_level TEXT NOT NULL DEFAULT 'medium',
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS live_preferences (
                     user_id TEXT PRIMARY KEY, model TEXT NOT NULL, voice TEXT NOT NULL,
@@ -224,12 +225,17 @@ class SqliteChatRepository:
                 "history_context_turns": "INTEGER NOT NULL DEFAULT 12",
                 "max_history_turns": "INTEGER NOT NULL DEFAULT 20",
             }
+            chat_preference_columns = {
+                "thinking_level": "TEXT NOT NULL DEFAULT 'medium'",
+            }
             for name, definition in assistant_columns.items():
                 self._ensure_column("assistants", name, definition)
             for name, definition in thread_columns.items():
                 self._ensure_column("chat_threads", name, definition)
             for name, definition in live_preference_columns.items():
                 self._ensure_column("live_preferences", name, definition)
+            for name, definition in chat_preference_columns.items():
+                self._ensure_column("chat_preferences", name, definition)
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         columns = {row[1] for row in self._connection.execute(f"PRAGMA table_info({table})")}
@@ -559,18 +565,35 @@ class SqliteChatRepository:
     def get_preferences(self, user_id: str) -> dict[str, Any]:
         with self._lock:
             row = self._one("SELECT * FROM chat_preferences WHERE user_id = ?", (user_id,))
-        return dict(row) if row else {"user_id": user_id, "provider_id": None, "model": None, "temperature": 0.7, "context_turns": 8}
+        return dict(row) if row else {
+            "user_id": user_id,
+            "provider_id": None,
+            "model": None,
+            "temperature": 0.7,
+            "context_turns": 8,
+            "thinking_level": "medium",
+        }
 
     def save_preferences(self, user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
         values = {**self.get_preferences(user_id), **fields}
         now = self._time()
         with self._lock, self._connection:
             self._connection.execute(
-                """INSERT INTO chat_preferences(user_id, provider_id, model, temperature, context_turns, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
+                """INSERT INTO chat_preferences(user_id, provider_id, model, temperature, context_turns, thinking_level, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET
                 provider_id=excluded.provider_id, model=excluded.model, temperature=excluded.temperature,
-                context_turns=excluded.context_turns, updated_at=excluded.updated_at""",
-                (user_id, values.get("provider_id"), values.get("model"), values["temperature"], values["context_turns"], now, now),
+                context_turns=excluded.context_turns, thinking_level=excluded.thinking_level,
+                updated_at=excluded.updated_at""",
+                (
+                    user_id,
+                    values.get("provider_id"),
+                    values.get("model"),
+                    values["temperature"],
+                    values["context_turns"],
+                    values.get("thinking_level", "medium"),
+                    now,
+                    now,
+                ),
             )
         return self.get_preferences(user_id)
 

@@ -29,6 +29,7 @@ class ChatPreferencesUpdate(BaseModel):
     model: str | None = Field(default=None, max_length=200)
     temperature: float = Field(default=0.7, ge=0, le=2)
     context_turns: int = Field(default=8, ge=0, le=128)
+    thinking_level: Literal["low", "medium", "high"] = "medium"
 
 
 class ChatPreferencesResponse(ChatPreferencesUpdate):
@@ -42,6 +43,7 @@ class ChatPreferencesResponse(ChatPreferencesUpdate):
             model=document.get("model"),
             temperature=document.get("temperature", 0.7),
             context_turns=document.get("context_turns", 8),
+            thinking_level=document.get("thinking_level", "medium"),
         )
 
 
@@ -145,6 +147,7 @@ class ChatStreamRequest(BaseModel):
     model: str | None = Field(default=None, max_length=200)
     temperature: float | None = Field(default=None, ge=0, le=2)
     context_turns: int | None = Field(default=None, ge=0, le=128)
+    thinking_level: Literal["low", "medium", "high"] = "medium"
     user_name: str | None = Field(default=None, max_length=120)
     locale: str | None = Field(default=None, max_length=32)
     timezone: str | None = Field(default=None, max_length=64)
@@ -164,6 +167,7 @@ class ChatRetryStreamRequest(BaseModel):
     model: str | None = Field(default=None, max_length=200)
     temperature: float | None = Field(default=None, ge=0, le=2)
     context_turns: int | None = Field(default=None, ge=0, le=128)
+    thinking_level: Literal["low", "medium", "high"] = "medium"
     user_name: str | None = Field(default=None, max_length=120)
     locale: str | None = Field(default=None, max_length=32)
     timezone: str | None = Field(default=None, max_length=64)

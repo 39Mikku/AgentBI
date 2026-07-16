@@ -1,5 +1,6 @@
 import json
 import unittest
+from types import SimpleNamespace
 
 
 class ChatAgentTests(unittest.TestCase):
@@ -178,6 +179,56 @@ class ChatAgentHistoryFailureTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("历史会话检索失败", result)
         self.assertIn("batch size is invalid", result)
+
+
+class ChatAgentGeminiThinkingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stream_tool_loop_applies_gemini_thinking_options(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        class Chunks:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if hasattr(self, "sent"):
+                    raise StopAsyncIteration
+                self.sent = True
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(
+                                content="answer",
+                                reasoning_content="summary",
+                                tool_calls=[],
+                            )
+                        )
+                    ]
+                )
+
+        class Completions:
+            async def create(self, **kwargs):
+                self.request = kwargs
+                return Chunks()
+
+        completions = Completions()
+        client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+        events = [
+            event
+            async for event in ChatAgent(capability_ids=[])._stream_tool_loop(
+                client,
+                [{"role": "user", "content": "question"}],
+                "gemini-3.5-flash",
+                1.0,
+                {},
+                "high",
+            )
+        ]
+
+        self.assertEqual(
+            completions.request["extra_body"]["extra_body"]["google"]["thinking_config"],
+            {"thinking_level": "high", "include_thoughts": True},
+        )
+        self.assertEqual([event["type"] for event in events], ["delta", "reasoning_summary"])
 
 
 class ChatAgentWebSearchTests(unittest.IsolatedAsyncioTestCase):
