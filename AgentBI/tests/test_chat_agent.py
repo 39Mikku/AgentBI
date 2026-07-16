@@ -7,7 +7,10 @@ class ChatAgentTests(unittest.TestCase):
         from AgentBI.src.agents.chat_agent import ChatAgent
 
         names = {tool["function"]["name"] for tool in ChatAgent.tool_definitions()}
-        self.assertEqual(names, {"delegate_email", "delegate_music", "delegate_bilibili", "search_web"})
+        self.assertEqual(
+            names,
+            {"delegate_email", "delegate_music", "delegate_bilibili", "search_web", "generate_image"},
+        )
 
     def test_web_search_is_exposed_only_when_direct_tool_is_mounted(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
@@ -17,6 +20,18 @@ class ChatAgentTests(unittest.TestCase):
 
         self.assertEqual(disabled, {"delegate_email"})
         self.assertEqual(enabled, {"search_web"})
+
+    def test_image_generation_is_exposed_only_when_direct_tool_is_mounted(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        disabled = {tool["function"]["name"] for tool in ChatAgent.tool_definitions(["agent.email"])}
+        enabled = {
+            tool["function"]["name"]
+            for tool in ChatAgent.tool_definitions(["tool.image_generation"])
+        }
+
+        self.assertEqual(disabled, {"delegate_email"})
+        self.assertEqual(enabled, {"generate_image"})
 
     def test_music_delegation_is_exposed_only_when_capability_is_mounted(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
@@ -173,6 +188,57 @@ class ChatAgentWebSearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(search_client.request[1]["search_depth"], "fast")
         self.assertEqual(search_client.request[1]["topic"], "news")
         self.assertEqual(json.loads(result)["results"][0]["url"], "https://example.com")
+
+
+class ChatAgentImageGenerationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_image_tool_receives_current_provider_and_conversation_scope(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+        from AgentBI.src.schemas.image_generation_schema import GeneratedImage
+
+        class Repository:
+            def get_capability_config(self, user_id, capability_id):
+                return {"mode": "lite", "lite_model": "gemini-image", "pro_quality": "high"}
+
+        class ImageService:
+            async def generate(self, **kwargs):
+                self.request = kwargs
+                return GeneratedImage(
+                    id="image-1",
+                    url="/api/generated-images/hash/chat/image-1.png",
+                    relative_path="hash/chat/image-1.png",
+                    media_type="image/png",
+                    mode="lite",
+                    model="gemini-image",
+                    aspect_ratio="landscape",
+                    prompt=kwargs["prompt"],
+                )
+
+        service = ImageService()
+        provider = {"_id": "provider-1", "api_key": "key", "base_url": "https://example.com/v1"}
+        result = await ChatAgent(
+            capability_ids=["tool.image_generation"],
+            repository=Repository(),
+            user_id="user@example.com",
+            conversation_id="conversation-1",
+            image_generation_service=service,
+        )._invoke_direct_tool(
+            "generate_image",
+            '{"prompt":"planned prompt","aspect_ratio":"landscape"}',
+            provider,
+        )
+
+        self.assertEqual(service.request["provider"], provider)
+        self.assertEqual(service.request["scope_id"], "conversation-1")
+        self.assertEqual(result.card["kind"], "image.generated")
+
+    async def test_direct_image_tool_rejects_missing_prompt_before_upstream_call(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        result = await ChatAgent(capability_ids=["tool.image_generation"])._invoke_direct_tool(
+            "generate_image", '{"aspect_ratio":"square"}', {}
+        )
+
+        self.assertIn("提示词", result)
 
 
 if __name__ == "__main__":

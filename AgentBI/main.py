@@ -4,6 +4,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from AgentBI.src.api.api import router
@@ -22,6 +23,7 @@ from AgentBI.src.api.toolbox_file_time import router as toolbox_file_time_router
 from AgentBI.src.api.toolbox_auto_input import router as toolbox_auto_input_router
 from AgentBI.src.api.toolbox_moegirl import router as toolbox_moegirl_router
 from AgentBI.src.api.tests import router as tests_router
+from AgentBI.src.api.image_generation import router as image_generation_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 from AgentBI.src.repositories.sqlite_test_repository import SqliteTestRepository
@@ -33,6 +35,9 @@ from AgentBI.src.services.toolbox.tts.bailian_voice_enrollment import BailianLiv
 from AgentBI.src.services.toolbox.directory_picker import NativeDirectoryPicker
 from AgentBI.src.services.toolbox.file_time.service import FileTimeService
 from AgentBI.src.services.toolbox.auto_input.service import AutoInputService
+from AgentBI.src.services.image_generation.artifact_store import ImageArtifactStore
+from AgentBI.src.services.image_generation.codex_oauth import CodexOAuthManager, CodexOAuthTokenStore
+from AgentBI.src.services.image_generation.service import ImageGenerationService
 
 logger = Logger.get_logger(__name__)
 
@@ -60,6 +65,16 @@ async def lifespan(app: FastAPI):
     app.state.directory_picker = NativeDirectoryPicker()
     app.state.file_time_service = FileTimeService()
     app.state.auto_input_service = AutoInputService()
+    image_root = Path(__file__).resolve().parent / "data" / "generated-images"
+    oauth_store = CodexOAuthTokenStore(
+        Path(__file__).resolve().parent / "data" / "codex-image-oauth.json"
+    )
+    app.state.codex_image_oauth = CodexOAuthManager(oauth_store)
+    app.state.image_generation_service = ImageGenerationService(
+        repository=app.state.chat_repository,
+        artifact_store=ImageArtifactStore(image_root, public_prefix="/api/generated-images"),
+        oauth_store=oauth_store,
+    )
     music_process = MusicApiProcessManager(
         enabled=os.getenv("NCM_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
         port=int(os.getenv("NCM_API_PORT", "3300")),
@@ -81,6 +96,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+_generated_image_root = Path(__file__).resolve().parent / "data" / "generated-images"
+_generated_image_root.mkdir(parents=True, exist_ok=True)
+app.mount("/generated-images", StaticFiles(directory=_generated_image_root), name="generated-images")
 app.include_router(router)
 app.include_router(provider_router)
 app.include_router(user_profile_router)
@@ -97,6 +115,7 @@ app.include_router(toolbox_file_time_router)
 app.include_router(toolbox_auto_input_router)
 app.include_router(toolbox_moegirl_router)
 app.include_router(tests_router)
+app.include_router(image_generation_router)
 
 
 @app.get("/")

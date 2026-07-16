@@ -6,6 +6,7 @@ import TimelineCard from '@/components/cards/TimelineCard.vue'
 import BilibiliPlayerModal from '@/components/BilibiliPlayerModal.vue'
 import AppModeSwitcher from '@/components/AppModeSwitcher.vue'
 import ToolEventDetails from '@/components/chat/ToolEventDetails.vue'
+import ImageSourcePicker from '@/components/ImageSourcePicker.vue'
 import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
@@ -61,6 +62,14 @@ const conversationTurns = computed(() => {
 function previewText(message?: ChatMessage) {
   const content = message?.content?.replace(/\s+/g, ' ').trim()
   return content || (message?.status === 'streaming' ? '正在生成回复…' : '暂无内容')
+}
+
+function renderTimelineMarkdown(message: ChatMessage, source: string) {
+  const cardImageUrls = (message.timeline || [])
+    .filter((event) => event.type === 'card' && event.kind === 'image.generated')
+    .map((event) => event.payload?.url)
+    .filter((url): url is string => typeof url === 'string')
+  return renderMarkdown(source, cardImageUrls)
 }
 
 function parseTimestamp(value?: string) {
@@ -205,26 +214,11 @@ async function loadProfile() {
     profileError.value = error instanceof Error ? error.message : '无法读取用户资料'
   }
 }
-async function uploadAvatar(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
-    profileError.value = '请选择图片文件'
-    return
-  }
-  if (file.size > 1_400_000) {
-    profileError.value = '头像请控制在 1.4 MB 以内'
-    return
-  }
+async function saveProfileAvatar(dataUrl: string | null) {
+  if (!dataUrl) return
   profileBusy.value = true
   profileError.value = ''
   try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.onerror = () => reject(new Error('读取图片失败'))
-      reader.readAsDataURL(file)
-    })
     auth.setProfile(await saveUserAvatar(userId.value, dataUrl))
   } catch (error) {
     profileError.value = error instanceof Error ? error.message : '头像保存失败'
@@ -283,7 +277,7 @@ onMounted(async () => {
           v-for="item in chat.conversations"
           :key="item.id"
           class="conversation-row"
-          :class="{ active: item.id === chat.activeId }"
+          :class="{ active: item.id === chat.activeId, generating: chat.isConversationGenerating(item.id) }"
         >
           <button class="conversation-main" @click="chat.select(item.id, userId)">
             <span class="conversation-signal"></span>
@@ -300,8 +294,9 @@ onMounted(async () => {
             />
             <span v-else class="conversation-copy"
               ><span class="conversation-title">{{ item.title }}</span
+              ><span v-if="chat.isConversationGenerating(item.id)" class="conversation-date generating-label">正在生成内容</span
               ><time
-                v-if="item.last_message_at || item.updated_at || item.created_at"
+                v-else-if="item.last_message_at || item.updated_at || item.created_at"
                 class="conversation-date"
                 >{{
                   formatConversationDate(item.last_message_at || item.updated_at || item.created_at)
@@ -415,7 +410,7 @@ onMounted(async () => {
                 <div
                   v-else
                   class="message-content markdown"
-                  v-html="renderMarkdown(event.content || '')"
+                  v-html="renderTimelineMarkdown(message, event.content || '')"
                 ></div>
                 <b
                   v-if="message.status === 'streaming' && index === message.timeline.length - 1"
@@ -556,8 +551,8 @@ onMounted(async () => {
           ></textarea>
           <div class="composer-actions">
             <span>Shift ↵ 换行</span
-            ><button v-if="chat.generating" class="stop" @click="chat.stop">■ 停止</button
-            ><button v-else class="send" :disabled="!input.trim()" @click="send">→</button>
+            ><button v-if="chat.activeGenerating" class="stop" @click="chat.stop">■ 停止</button
+            ><button v-else class="send" :disabled="chat.generating || !input.trim()" @click="send">→</button>
           </div>
         </div>
         <p class="disclaimer">OBSIDIAN 可以调用已连接的能力；请核对执行结果。</p>
@@ -576,14 +571,18 @@ onMounted(async () => {
         </div>
         <h2>{{ userName }}</h2>
         <p>{{ profile?.email || userId }}</p>
-        <label class="avatar-upload"
-          ><input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            :disabled="profileBusy"
-            @change="uploadAvatar"
-          />{{ profileBusy ? '正在保存…' : '上传头像' }}</label
-        ><small>PNG、JPG、WebP 或 GIF，最大 1.4 MB</small>
+        <ImageSourcePicker
+          :model-value="profile?.avatar_data_url"
+          :user-id="userId"
+          :provider-id="chat.preferences.providerId"
+          scope-id="user-avatar"
+          theme="light"
+          shape="circle"
+          :disabled="profileBusy"
+          :allow-remove="false"
+          @update:model-value="saveProfileAvatar"
+          @error="profileError = $event"
+        />
         <p v-if="profileError" class="profile-error">{{ profileError }}</p>
       </section>
     </div>
@@ -855,6 +854,23 @@ onMounted(async () => {
 .active .conversation-signal {
   background: var(--acid);
   box-shadow: 0 0 8px var(--acid);
+}
+.conversation-row.generating .conversation-signal {
+  background: #ffb84c;
+  box-shadow: 0 0 0 3px rgba(255, 184, 76, 0.12);
+  animation: conversationPulse 1.1s ease-in-out infinite;
+}
+.conversation-row.generating.active .conversation-signal {
+  background: var(--acid);
+}
+.generating-label {
+  color: #ffcb72 !important;
+}
+@keyframes conversationPulse {
+  50% {
+    opacity: 0.3;
+    transform: scale(0.72);
+  }
 }
 .conversation-title {
   white-space: nowrap;
@@ -1451,6 +1467,14 @@ textarea {
   text-decoration: underline;
   text-decoration-color: var(--acid);
   text-underline-offset: 3px;
+}
+.markdown :deep(img) {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 640px);
+  max-height: 70vh;
+  object-fit: contain;
 }
 .markdown :deep(table) {
   width: 100%;

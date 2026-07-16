@@ -83,6 +83,9 @@ Desktop.ini
 
 # ---------- Local chat storage ----------
 AgentBI/data/
+# Project-owned Codex OAuth credentials (keep explicit even though data/ is ignored)
+codex-image-oauth.json
+codex-image-oauth.json.tmp
 
 # ---------- 无关参考文件 ----------
 工具箱/

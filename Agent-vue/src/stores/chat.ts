@@ -12,6 +12,10 @@ import type {
 } from '@/api/chat-types'
 import { replaceTimelineBranch } from '@/utils/message-branch'
 import { toTimelineCard } from '@/utils/card-events'
+import {
+  ConversationGenerationTracker,
+  hasGeneratingConversation,
+} from '@/utils/conversation-generation'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -20,7 +24,8 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const activeId = ref('')
   const loading = ref(false)
-  const generating = ref(false)
+  const generatingConversationIds = ref<string[]>([])
+  const generationTracker = new ConversationGenerationTracker()
   const syncMessage = ref('')
   const error = ref('')
   const preferences = ref<ChatPreferences>({ temperature: 0.7, contextTurns: 8 })
@@ -34,6 +39,20 @@ export const useChatStore = defineStore('chat', () => {
     () => assistants.value.find((item) => item.id === activeAssistantId.value) || null,
   )
   const isSyncing = computed(() => Boolean(syncMessage.value))
+  const generating = computed(() => generatingConversationIds.value.length > 0)
+  const activeGenerating = computed(() =>
+    hasGeneratingConversation(generatingConversationIds.value, activeId.value),
+  )
+
+  function isConversationGenerating(conversationId: string) {
+    return hasGeneratingConversation(generatingConversationIds.value, conversationId)
+  }
+
+  function markConversationGenerating(conversationId: string, active: boolean) {
+    if (active) generationTracker.start(conversationId)
+    else generationTracker.finish(conversationId)
+    generatingConversationIds.value = generationTracker.ids()
+  }
 
   function activeStorageKey(userId: string) {
     return `agentbi_active_conversation:${userId}`
@@ -337,7 +356,8 @@ export const useChatStore = defineStore('chat', () => {
     placeTemporary: () => ChatMessage = () => appendStreamingMessage(userId),
   ) {
     const temporary = placeTemporary()
-    generating.value = true
+    const conversationId = temporary.conversation_id || activeId.value
+    markConversationGenerating(conversationId, true)
     error.value = ''
     controller = new AbortController()
     try {
@@ -347,7 +367,7 @@ export const useChatStore = defineStore('chat', () => {
         error.value = err instanceof Error ? err.message : '生成失败'
       temporary.status = 'error'
     } finally {
-      generating.value = false
+      markConversationGenerating(conversationId, false)
       controller = null
     }
   }
@@ -495,6 +515,9 @@ export const useChatStore = defineStore('chat', () => {
     activeId,
     loading,
     generating,
+    generatingConversationIds,
+    activeGenerating,
+    isConversationGenerating,
     isSyncing,
     syncMessage,
     error,

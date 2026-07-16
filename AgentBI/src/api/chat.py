@@ -16,6 +16,7 @@ from AgentBI.src.services.bilibili_client import BilibiliClient
 from AgentBI.src.services.memory_service import MemoryService, build_context_bundle
 from AgentBI.src.api.music import get_music_client
 from AgentBI.src.services.netease_music_client import NeteaseMusicClient
+from AgentBI.src.services.image_generation.service import ImageGenerationService
 
 router = APIRouter(tags=["chat"])
 logger = Logger.get_logger(__name__)
@@ -116,6 +117,7 @@ def stream_assistant(
     context_summary: str | None = None,
     music_client: NeteaseMusicClient | None = None,
     bilibili_client: BilibiliClient | None = None,
+    image_generation_service: ImageGenerationService | None = None,
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -140,6 +142,7 @@ def stream_assistant(
                 conversation_id,
                 music_client,
                 bilibili_client,
+                image_generation_service=image_generation_service,
             ).stream(context, provider, model, temperature, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
@@ -235,6 +238,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             bundle["summary"],
             get_music_client(request),
             BilibiliClient(),
+            getattr(request.app.state, "image_generation_service", None),
         ),
         media_type="text/event-stream",
     )
@@ -283,6 +287,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             bundle["summary"],
             get_music_client(request),
             BilibiliClient(),
+            getattr(request.app.state, "image_generation_service", None),
         ),
         media_type="text/event-stream",
     )
@@ -323,6 +328,7 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             bundle["summary"],
             get_music_client(request),
             BilibiliClient(),
+            getattr(request.app.state, "image_generation_service", None),
         ),
         media_type="text/event-stream",
     )

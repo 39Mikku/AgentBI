@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from AgentBI.src.schemas.image_generation_schema import ImageGenerationConfig
+
 
 class EmptyCapabilityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -35,6 +37,7 @@ CAPABILITY_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "agent.music": MusicSubagentConfig,
     "agent.bilibili": BilibiliSubagentConfig,
     "tool.web_search": TavilySearchConfig,
+    "tool.image_generation": ImageGenerationConfig,
 }
 
 CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
@@ -94,6 +97,35 @@ CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
                 {"label": "快速", "value": "fast"},
                 {"label": "标准", "value": "basic"},
                 {"label": "深度", "value": "advanced"},
+            ],
+        },
+    ],
+    "tool.image_generation": [
+        {
+            "key": "mode",
+            "label": "运行模式",
+            "description": "Lite 使用当前 OpenAI 兼容提供商，Pro 使用独立 Codex OAuth",
+            "type": "select",
+            "options": [
+                {"label": "Lite", "value": "lite"},
+                {"label": "Pro", "value": "pro"},
+            ],
+        },
+        {
+            "key": "lite_model",
+            "label": "Lite 模型",
+            "description": "当前提供商中通过 chat/completions 调用的 Gemini Image 模型名称",
+            "type": "text",
+        },
+        {
+            "key": "pro_quality",
+            "label": "Pro 画质",
+            "description": "固定 gpt-image-2 的画质档位，主模型不能自行修改",
+            "type": "select",
+            "options": [
+                {"label": "Low", "value": "low"},
+                {"label": "Medium", "value": "medium"},
+                {"label": "High", "value": "high"},
             ],
         },
     ],

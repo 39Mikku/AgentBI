@@ -5,6 +5,8 @@ import type { LiveModelId } from '@/api/live-types'
 import { listTtsVoices } from '@/api/toolbox-tts'
 import type { TtsCustomVoice } from '@/api/toolbox-tts-types'
 import AppModeSwitcher from '@/components/AppModeSwitcher.vue'
+import ImageSourcePicker from '@/components/ImageSourcePicker.vue'
+import { getPreferences as getChatPreferences } from '@/api/chat'
 import LiveAvatarCore from '@/components/live/LiveAvatarCore.vue'
 import {
   historySliderToTurns,
@@ -32,7 +34,7 @@ const transcriptRail = ref<HTMLElement | null>(null)
 const editingConversationId = ref('')
 const editingTitle = ref('')
 const memoryDraft = ref('')
-const avatarInput = ref<HTMLInputElement | null>(null)
+const imageProviderId = ref<string>()
 const callDurationLabel = ref('00:00')
 const customVoice = ref('')
 const voiceMode = ref('builtin')
@@ -160,17 +162,6 @@ async function deleteCurrentRole() {
   await live.removeRole(role.id, userId.value)
 }
 
-function chooseAvatar() { avatarInput.value?.click() }
-
-function loadAvatar(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => { roleDraft.avatar_data_url = String(reader.result || '') }
-  reader.readAsDataURL(file)
-  ;(event.target as HTMLInputElement).value = ''
-}
-
 function beginRename(id: string, title: string) {
   editingConversationId.value = id
   editingTitle.value = title
@@ -217,11 +208,13 @@ watch(
 )
 
 onMounted(async () => {
-  const [, voiceResult] = await Promise.allSettled([
+  const [, voiceResult, preferenceResult] = await Promise.allSettled([
     live.loadWorkspace(userId.value),
     listTtsVoices(userId.value),
+    getChatPreferences(userId.value),
   ])
   if (voiceResult.status === 'fulfilled') customVoices.value = voiceResult.value
+  if (preferenceResult.status === 'fulfilled') imageProviderId.value = preferenceResult.value.providerId
 })
 onBeforeUnmount(() => {
   stopDuration()
@@ -395,13 +388,15 @@ onBeforeUnmount(() => {
               </section>
               <section class="deck-section role-identity">
                 <label><span>01</span> 角色身份</label>
-                <div class="avatar-editor">
-                  <button class="avatar-preview" :disabled="!live.canEditSettings" @click="chooseAvatar">
-                    <img v-if="roleDraft.avatar_data_url" :src="roleDraft.avatar_data_url" alt="" /><i v-else>{{ roleInitials(roleDraft.name) }}</i><small>更换</small>
-                  </button>
-                  <input ref="avatarInput" type="file" accept="image/*" hidden @change="loadAvatar" />
-                  <div><span>角色头像</span><p>头像会持久化，并显示在 Live 声场中心。</p><button v-if="roleDraft.avatar_data_url" @click="roleDraft.avatar_data_url = null">移除头像</button></div>
-                </div>
+                <ImageSourcePicker
+                  v-model="roleDraft.avatar_data_url"
+                  :user-id="userId"
+                  :provider-id="imageProviderId"
+                  scope-id="live-role-avatar"
+                  theme="dark"
+                  shape="circle"
+                  :disabled="!live.canEditSettings"
+                />
                 <input v-model="roleDraft.name" class="text-input" maxlength="40" placeholder="角色名称" :disabled="!live.canEditSettings" />
               </section>
               <section class="deck-section">

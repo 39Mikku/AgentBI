@@ -46,6 +46,7 @@ class DirectToolRegistration:
     prompt: str
     tool_name: str
     tool_description: str
+    parameters: dict[str, Any]
 
     def tool_definition(self) -> dict[str, Any]:
         return {
@@ -53,23 +54,7 @@ class DirectToolRegistration:
             "function": {
                 "name": self.tool_name,
                 "description": self.tool_description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "要搜索的完整问题或关键词"},
-                        "topic": {
-                            "type": "string",
-                            "enum": ["general", "news", "finance"],
-                            "description": "普通内容、实时新闻或金融内容",
-                        },
-                        "time_range": {
-                            "type": "string",
-                            "enum": ["day", "week", "month", "year"],
-                            "description": "可选的发布时间范围",
-                        },
-                    },
-                    "required": ["query"],
-                },
+                "parameters": deepcopy(self.parameters),
             },
         }
 
@@ -124,6 +109,54 @@ DIRECT_TOOLS = (
         ),
         tool_name="search_web",
         tool_description="使用 Tavily 搜索当前网页信息，返回带 URL 的结构化来源；仅在需要外部信息时调用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "要搜索的完整问题或关键词"},
+                "topic": {
+                    "type": "string",
+                    "enum": ["general", "news", "finance"],
+                    "description": "普通内容、实时新闻或金融内容",
+                },
+                "time_range": {
+                    "type": "string",
+                    "enum": ["day", "week", "month", "year"],
+                    "description": "可选的发布时间范围",
+                },
+            },
+            "required": ["query"],
+        },
+    ),
+    DirectToolRegistration(
+        capability_id="tool.image_generation",
+        display_name="图像生成",
+        description="根据文本描述生成一张图片并推送到当前会话。",
+        prompt=(
+            "当用户明确要求创建、绘制或生成图片时调用 generate_image。"
+            "先把需求整理成可直接用于生图的完整提示词：明确主体与动作、场景和构图、视觉风格、"
+            "镜头与光线、色彩材质以及必须出现或避免的元素；需要精确文字时用引号写出。"
+        ),
+        tool_name="generate_image",
+        tool_description=(
+            "Generate exactly one image. Write a complete production-ready prompt preserving the user's intent. "
+            "Include subject, action, setting, composition, visual medium, lighting, palette, materials and explicit constraints. "
+            "Choose square, landscape or portrait from the requested composition."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "A complete image-generation prompt planned from the user's request.",
+                },
+                "aspect_ratio": {
+                    "type": "string",
+                    "enum": ["square", "landscape", "portrait"],
+                    "description": "The composition best suited to the request.",
+                },
+            },
+            "required": ["prompt", "aspect_ratio"],
+        },
     ),
 )
 

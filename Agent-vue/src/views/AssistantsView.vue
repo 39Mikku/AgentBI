@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import * as api from '@/api/assistants'
 import { useAuthStore } from '@/stores/auth'
 import type { AssistantProfile } from '@/api/chat-types'
+import { getPreferences } from '@/api/chat'
+import ImageSourcePicker from '@/components/ImageSourcePicker.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -12,6 +14,7 @@ const assistants = ref<AssistantProfile[]>([])
 const selectedId = ref('')
 const busy = ref(false)
 const error = ref('')
+const imageProviderId = ref<string>()
 const memoryText = ref('')
 const memoryUpdatedAt = ref<string | null>(null)
 const memoryBusy = ref('')
@@ -158,22 +161,10 @@ async function remove(assistant: AssistantProfile) {
     error.value = reason instanceof Error ? reason.message : '删除失败'
   }
 }
-async function uploadAvatar(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  if (!file.type.startsWith('image/') || file.size > 1_400_000) {
-    error.value = '请选择 1.4 MB 以内的图片'
-    return
-  }
-  form.value.avatar_data_url = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
 onMounted(() => {
-  void load()
+  void Promise.all([load(), getPreferences(userId.value)]).then(([, preferences]) => {
+    imageProviderId.value = preferences.providerId
+  })
 })
 </script>
 
@@ -234,18 +225,20 @@ onMounted(() => {
             <label class="check"><input v-model="form.capability_ids" type="checkbox" value="agent.music" />音乐子代理<small>网易云搜索、每日推荐与可播放卡片</small></label>
             <label class="check"><input v-model="form.capability_ids" type="checkbox" value="agent.bilibili" />Bilibili 视频子代理<small>搜索公开视频、获取详情并推送内嵌播放卡片</small></label>
             <label class="check"><input v-model="form.capability_ids" type="checkbox" value="tool.web_search" />Tavily 网页搜索<small>直接检索实时网页信息与可引用来源，不启动子代理</small></label>
+            <label class="check"><input v-model="form.capability_ids" type="checkbox" value="tool.image_generation" />图像生成<small>由主模型规划提示词并生成单张图片，使用全局 Lite / Pro 配置</small></label>
           </fieldset>
           <label class="check"><input v-model="form.include_runtime_context" type="checkbox" />注入运行时环境<small>向最新用户请求附加时间、时区、语言和用户名</small></label>
           <div class="avatar-field">
             <p>头像</p>
-            <label class="avatar-upload-card">
-              <input class="avatar-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="uploadAvatar" />
-              <img v-if="form.avatar_data_url" :src="form.avatar_data_url" alt="" />
-              <span v-else class="avatar-placeholder">{{ form.name.trim().slice(0, 2).toUpperCase() || 'AI' }}</span>
-              <span class="avatar-upload-copy"><strong>{{ form.avatar_data_url ? '更换头像' : '选择头像' }}</strong><small>PNG、JPG、WebP 或 GIF · 最大 1.4 MB</small></span>
-              <i aria-hidden="true">↗</i>
-            </label>
-            <button v-if="form.avatar_data_url" class="remove-avatar" type="button" @click="form.avatar_data_url = null">移除头像</button>
+            <ImageSourcePicker
+              v-model="form.avatar_data_url"
+              :user-id="userId"
+              :provider-id="imageProviderId"
+              scope-id="assistant-avatar"
+              theme="light"
+              shape="rounded"
+              @error="error = $event"
+            />
           </div>
         </template>
 

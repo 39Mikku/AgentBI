@@ -4,6 +4,7 @@ import MusicTrackCard from './MusicTrackCard.vue'
 import MusicTrackListCard from './MusicTrackListCard.vue'
 import BilibiliVideoCard from './BilibiliVideoCard.vue'
 import BilibiliVideoListCard from './BilibiliVideoListCard.vue'
+import ImageGenerationCard from './ImageGenerationCard.vue'
 import type { MusicTrack } from '@/utils/music-player'
 import { isValidBvid, type BilibiliVideo } from '@/utils/bilibili-player'
 
@@ -43,6 +44,15 @@ const videos = computed<BilibiliVideo[]>(() => {
       url: typeof item.url === 'string' ? item.url : undefined,
     }))
 })
+const image = computed(() => ({
+  url: typeof props.payload?.url === 'string' ? props.payload.url : '',
+  prompt: typeof props.payload?.prompt === 'string' ? props.payload.prompt : undefined,
+  mode: typeof props.payload?.mode === 'string' ? props.payload.mode : undefined,
+  model: typeof props.payload?.model === 'string' ? props.payload.model : undefined,
+  aspectRatio: typeof props.payload?.aspect_ratio === 'string' ? props.payload.aspect_ratio : undefined,
+  width: typeof props.payload?.width === 'number' ? props.payload.width : null,
+  height: typeof props.payload?.height === 'number' ? props.payload.height : null,
+}))
 </script>
 
 <template>
@@ -58,6 +68,16 @@ const videos = computed<BilibiliVideo[]>(() => {
     v-else-if="kind === 'bilibili.video' && videos[0]"
     :video="videos[0]"
     @play="emit('playBilibili', $event)"
+  />
+  <ImageGenerationCard
+    v-else-if="kind === 'image.generated' && image.url"
+    :url="image.url"
+    :prompt="image.prompt"
+    :mode="image.mode"
+    :model="image.model"
+    :aspect-ratio="image.aspectRatio"
+    :width="image.width"
+    :height="image.height"
   />
   <div v-else class="unknown-card"><span>EXTENSION CARD</span><b>{{ kind || 'unknown' }}</b></div>
 </template>
