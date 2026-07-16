@@ -17,6 +17,8 @@ from AgentBI.src.services.memory_service import MemoryService, build_context_bun
 from AgentBI.src.api.music import get_music_client
 from AgentBI.src.services.netease_music_client import NeteaseMusicClient
 from AgentBI.src.services.image_generation.service import ImageGenerationService
+from AgentBI.src.services.model_task_service import ModelTaskConfigurationError
+from AgentBI.src.services.multimodal_context_service import MultimodalContextService
 
 router = APIRouter(tags=["chat"])
 logger = Logger.get_logger(__name__)
@@ -105,7 +107,7 @@ def stream_assistant(
     repository: Any,
     conversation_id: str,
     assistant_message: dict[str, Any],
-    context: list[dict[str, str]],
+    context: list[dict[str, Any]],
     provider: dict[str, Any],
     model: str,
     temperature: float,
@@ -118,6 +120,7 @@ def stream_assistant(
     music_client: NeteaseMusicClient | None = None,
     bilibili_client: BilibiliClient | None = None,
     image_generation_service: ImageGenerationService | None = None,
+    asset_service: Any | None = None,
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
         answer: list[str] = []
@@ -158,6 +161,13 @@ def stream_assistant(
                     append_timeline_event(timeline, event_type, event)
                     yield encode_sse_event(event_type, event)
                 elif event_type == "card":
+                    asset_id = event.get("payload", {}).get("asset_id")
+                    if asset_id and asset_service:
+                        repository.bind_message_assets(
+                            str(assistant_message["_id"]),
+                            assistant_message["user_id"],
+                            [str(asset_id)],
+                        )
                     append_timeline_event(timeline, event_type, event)
                     yield encode_sse_event("card", event)
             message = repository.complete_assistant_message(
@@ -192,6 +202,31 @@ def stream_assistant(
     return event_stream()
 
 
+async def prepare_multimodal_context(
+    request: Request,
+    repository: Any,
+    *,
+    user_id: str,
+    provider_id: str,
+    model: str,
+    context: list[dict[str, Any]],
+    path: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    asset_service = getattr(request.app.state, "studio_asset_service", None)
+    if not asset_service:
+        return context
+    try:
+        return await MultimodalContextService(repository, asset_service).prepare(
+            user_id=user_id,
+            provider_id=provider_id,
+            model=model,
+            context=context,
+            path=path,
+        )
+    except (ModelTaskConfigurationError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 async def _maintain_after_reply(
     memory_service: MemoryService,
     thread: dict[str, Any],
@@ -207,12 +242,31 @@ async def _maintain_after_reply(
 async def stream_chat(request: Request, payload: ChatStreamRequest):
     repository = get_chat_repository(request)
     thread, provider, model, temperature, context_turns, assistant = resolve_generation(repository, payload)
+    asset_service = getattr(request.app.state, "studio_asset_service", None)
+    if payload.attachment_ids:
+        if not asset_service:
+            raise HTTPException(status_code=503, detail="附件服务尚未初始化")
+        try:
+            asset_service.validate_assets(payload.user_id, payload.attachment_ids)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
     user_message = repository.create_user_message(payload.conversation_id, payload.user_id, payload.content)
     if not user_message:
         raise HTTPException(status_code=404, detail="无法创建用户消息")
+    if payload.attachment_ids:
+        asset_service.bind_assets(str(user_message["_id"]), payload.user_id, payload.attachment_ids)
     memory_service = MemoryService(repository)
     bundle = memory_service.context_bundle(thread, assistant, context_turns)
-    context = bundle["messages"]
+    path = repository.get_active_path(payload.conversation_id, payload.user_id)
+    context = await prepare_multimodal_context(
+        request,
+        repository,
+        user_id=payload.user_id,
+        provider_id=str(provider["_id"]),
+        model=model,
+        context=bundle["messages"],
+        path=path,
+    )
     assistant_message = repository.create_assistant_message(
         payload.conversation_id,
         payload.user_id,
@@ -239,6 +293,7 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             get_music_client(request),
             BilibiliClient(),
             getattr(request.app.state, "image_generation_service", None),
+            asset_service,
         ),
         media_type="text/event-stream",
     )
@@ -261,7 +316,15 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
         thread.get("context_summary_until_message_id"),
         assistant.get("compression_keep_recent_turns", 4),
     )
-    context = bundle["messages"]
+    context = await prepare_multimodal_context(
+        request,
+        repository,
+        user_id=payload.user_id,
+        provider_id=str(provider["_id"]),
+        model=model,
+        context=bundle["messages"],
+        path=source_path[:-1],
+    )
     assistant_message = repository.retry_assistant_message(
         payload.conversation_id,
         payload.user_id,
@@ -288,6 +351,7 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             get_music_client(request),
             BilibiliClient(),
             getattr(request.app.state, "image_generation_service", None),
+            getattr(request.app.state, "studio_asset_service", None),
         ),
         media_type="text/event-stream",
     )
@@ -302,7 +366,16 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
         raise HTTPException(status_code=404, detail="用户消息不存在")
     memory_service = MemoryService(repository)
     bundle = memory_service.context_bundle(thread, assistant, context_turns)
-    context = bundle["messages"]
+    path = repository.get_active_path(payload.conversation_id, payload.user_id)
+    context = await prepare_multimodal_context(
+        request,
+        repository,
+        user_id=payload.user_id,
+        provider_id=str(provider["_id"]),
+        model=model,
+        context=bundle["messages"],
+        path=path,
+    )
     assistant_message = repository.create_assistant_message(
         payload.conversation_id,
         payload.user_id,
@@ -329,6 +402,7 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             get_music_client(request),
             BilibiliClient(),
             getattr(request.app.state, "image_generation_service", None),
+            getattr(request.app.state, "studio_asset_service", None),
         ),
         media_type="text/event-stream",
     )

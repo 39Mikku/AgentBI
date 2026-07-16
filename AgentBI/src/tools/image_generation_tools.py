@@ -39,6 +39,7 @@ async def generate_image(
         "display_instruction": "图片已由界面卡片展示，不要再次输出图片链接或 Markdown 图片。",
     }
     payload = image.model_dump(exclude={"relative_path", "media_type"})
+    payload["asset_id"] = image.id
     return AtomicToolResult(
         content=json.dumps(compact, ensure_ascii=False, separators=(",", ":")),
         card={"kind": "image.generated", "payload": payload},

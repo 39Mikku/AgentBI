@@ -29,12 +29,14 @@ class ImageGenerationService:
         oauth_store: CodexOAuthTokenStore,
         lite_adapter: LiteChatImageAdapter | None = None,
         pro_adapter: CodexImageAdapter | None = None,
+        asset_service: Any | None = None,
     ):
         self.repository = repository
         self.artifact_store = artifact_store
         self.oauth_store = oauth_store
         self.lite_adapter = lite_adapter or LiteChatImageAdapter()
         self.pro_adapter = pro_adapter or CodexImageAdapter()
+        self.asset_service = asset_service
 
     async def generate(
         self,
@@ -65,7 +67,7 @@ class ImageGenerationService:
                 quality=config["pro_quality"],
             )
         width, height = _DIMENSIONS.get(aspect_ratio, _DIMENSIONS["square"])
-        return self.artifact_store.save(
+        image = self.artifact_store.save(
             user_id=user_id,
             scope_id=scope_id,
             image_bytes=binary.image_bytes,
@@ -79,4 +81,6 @@ class ImageGenerationService:
                 "prompt": prompt,
             },
         )
-
+        if self.asset_service:
+            self.asset_service.register_generated(user_id, image)
+        return image

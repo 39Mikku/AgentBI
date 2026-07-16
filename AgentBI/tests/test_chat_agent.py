@@ -111,6 +111,30 @@ class ChatAgentTests(unittest.TestCase):
         self.assertNotIn("runtime_context", messages[0]["content"])
         self.assertEqual(messages[1]["content"], "hello")
 
+    def test_subagent_instruction_excludes_multimodal_base64_payloads(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        instruction = ChatAgent._delegated_instruction(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "把图片内容写进邮件"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64,VERY_LARGE_SECRET_DATA"},
+                        },
+                    ],
+                }
+            ],
+            '{"instruction":"发送邮件"}',
+            "邮件任务",
+        )
+
+        self.assertIn("把图片内容写进邮件", instruction)
+        self.assertNotIn("base64", instruction)
+        self.assertNotIn("VERY_LARGE_SECRET_DATA", instruction)
+
     def test_history_search_tool_is_exposed_only_when_enabled(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
 

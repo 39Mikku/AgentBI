@@ -72,7 +72,31 @@ export interface CapabilitySettings {
   fields: CapabilitySettingField[]
 }
 
-export type ModelRouteRole = 'embedding' | 'compression' | 'memory' | 'title'
+export type ModelRouteRole = 'embedding' | 'compression' | 'memory' | 'title' | 'vision'
+
+export interface ModelCapability {
+  user_id: string
+  provider_id: string
+  model: string
+  supports_vision: boolean
+}
+
+export interface StudioAsset {
+  id: string
+  source: 'uploaded' | 'generated'
+  kind: 'image' | 'docx'
+  filename: string
+  mime_type: string
+  size: number
+  url?: string | null
+  status: string
+  metadata: Record<string, unknown>
+  created_at?: string
+  deleted_at?: string | null
+  source_conversation_id?: string | null
+  source_conversation_title?: string | null
+  source_message_id?: string | null
+}
 
 export interface ModelRoute {
   user_id: string
@@ -98,6 +122,7 @@ export interface ChatMessage {
   sibling_index?: number
   version_ids?: string[]
   model_snapshot?: Record<string, unknown>
+  assets?: StudioAsset[]
 }
 
 export interface ChatTimelineEvent {
@@ -129,6 +154,7 @@ export interface ChatStreamEvent {
 export type ChatGenerationPayload = {
   user_id: string
   conversation_id: string
+  attachment_ids?: string[]
 } & Partial<ChatPreferences> &
   ChatRuntimeContext
 

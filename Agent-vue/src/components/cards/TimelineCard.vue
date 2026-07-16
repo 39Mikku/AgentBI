@@ -52,6 +52,7 @@ const image = computed(() => ({
   aspectRatio: typeof props.payload?.aspect_ratio === 'string' ? props.payload.aspect_ratio : undefined,
   width: typeof props.payload?.width === 'number' ? props.payload.width : null,
   height: typeof props.payload?.height === 'number' ? props.payload.height : null,
+  deleted: props.payload?.deleted === true,
 }))
 </script>
 
@@ -70,7 +71,7 @@ const image = computed(() => ({
     @play="emit('playBilibili', $event)"
   />
   <ImageGenerationCard
-    v-else-if="kind === 'image.generated' && image.url"
+    v-else-if="kind === 'image.generated' && (image.url || image.deleted)"
     :url="image.url"
     :prompt="image.prompt"
     :mode="image.mode"
@@ -78,6 +79,7 @@ const image = computed(() => ({
     :aspect-ratio="image.aspectRatio"
     :width="image.width"
     :height="image.height"
+    :deleted="image.deleted"
   />
   <div v-else class="unknown-card"><span>EXTENSION CARD</span><b>{{ kind || 'unknown' }}</b></div>
 </template>

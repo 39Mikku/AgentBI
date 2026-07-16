@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import * as providers from '@/api/providers'
 import * as modelRoutesApi from '@/api/model-routes'
+import * as modelCapabilitiesApi from '@/api/model-capabilities'
 import type { ModelRouteRole, ProviderProfile } from '@/api/chat-types'
 import { useChatStore } from '@/stores/chat'
 import {
@@ -27,13 +28,18 @@ const routeDefinitions: Array<{ role: ModelRouteRole; index: string; title: stri
   { role: 'compression', index: 'ZIP', title: '压缩模型', detail: '长会话的增量上下文摘要' },
   { role: 'memory', index: 'MEM', title: '记忆模型', detail: '提炼跨会话稳定事实与偏好' },
   { role: 'title', index: 'TTL', title: '标题模型', detail: '首轮完成后生成会话标题' },
+  { role: 'vision', index: 'VIS', title: '识图模型', detail: '为纯文本聊天模型转述图片内容' },
 ]
 const routeDrafts = ref<Record<ModelRouteRole, { providerId: string; model: string }>>({
   embedding: { providerId: '', model: '' },
   compression: { providerId: '', model: '' },
   memory: { providerId: '', model: '' },
   title: { providerId: '', model: '' },
+  vision: { providerId: '', model: '' },
 })
+const visionCapabilities = ref(new Set<string>())
+const capabilityBusy = ref('')
+const modelCapabilityKey = (providerId: string, model: string) => `${providerId}::${model}`
 const activeProfile = computed(() => profiles.value.find((profile) => profile.id === chat.preferences.providerId))
 const contextSlider = computed({
   get: () => contextTurnSliderIndex(chat.preferences.contextTurns),
@@ -42,14 +48,38 @@ const contextSlider = computed({
 const contextLabel = computed(() => contextTurnLabel(chat.preferences.contextTurns))
 
 async function load() {
-  const result = await loadSettingsResources(
-    providers.listProviders,
-    () => modelRoutesApi.listModelRoutes(userId.value),
-  )
+  const [result, capabilities] = await Promise.all([
+    loadSettingsResources(providers.listProviders, () => modelRoutesApi.listModelRoutes(userId.value)),
+    modelCapabilitiesApi.listModelCapabilities(userId.value).catch(() => []),
+  ])
   profiles.value = result.providers
   for (const route of result.routes)
     routeDrafts.value[route.role] = { providerId: route.provider_id, model: route.model }
   error.value = result.providerError || result.routeError
+  visionCapabilities.value = new Set(
+    capabilities
+      .filter((item) => item.supports_vision)
+      .map((item) => modelCapabilityKey(item.provider_id, item.model)),
+  )
+}
+function supportsVision(providerId: string, model: string) {
+  return visionCapabilities.value.has(modelCapabilityKey(providerId, model))
+}
+async function toggleVision(providerId: string, model: string) {
+  const key = modelCapabilityKey(providerId, model)
+  capabilityBusy.value = key
+  const enabled = !visionCapabilities.value.has(key)
+  try {
+    await modelCapabilitiesApi.saveModelCapability(userId.value, providerId, model, enabled)
+    const next = new Set(visionCapabilities.value)
+    if (enabled) next.add(key)
+    else next.delete(key)
+    visionCapabilities.value = next
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : '模型能力保存失败'
+  } finally {
+    capabilityBusy.value = ''
+  }
 }
 function routeModels(role: ModelRouteRole) {
   return profiles.value.find((profile) => profile.id === routeDrafts.value[role].providerId)?.available_models || []
@@ -142,7 +172,7 @@ onMounted(async () => { await chat.restorePreferences(userId.value); await load(
         <p class="context-note">按 2× 档位扩展：2 → 4 → 8 → 16 → 32 → 64 → 128；最右侧不截断历史上下文。</p>
         <p class="apply-note">这些参数会用于下一次发送；新建会话会记住当前选择。</p>
 
-        <div class="profiles-head task-head"><div><p>BACKGROUND ROUTING</p><h2>后台模型分工</h2></div><span>04</span></div>
+        <div class="profiles-head task-head"><div><p>BACKGROUND ROUTING</p><h2>后台模型分工</h2></div><span>05</span></div>
         <p class="route-intro">聊天模型只负责当前回复。把索引、压缩、记忆与标题交给更轻量或更专门的模型。</p>
         <div class="route-grid">
           <article v-for="definition in routeDefinitions" :key="definition.role" class="route-card">
@@ -165,7 +195,19 @@ onMounted(async () => { await chat.restorePreferences(userId.value); await load(
         <article v-for="profile in profiles" :key="profile.id" class="profile">
           <div><p>{{ profile.name }}</p><code>{{ profile.base_url }}</code></div>
           <div class="profile-actions"><button @click="refresh(profile.id)">{{ busy === profile.id ? '同步中' : '刷新模型' }}</button><button class="remove" @click="remove(profile.id)">×</button></div>
-          <div class="model-list"><button v-for="model in profile.available_models" :key="model" :class="{ selected: chat.preferences.model === model }" @click="chat.preferences.providerId = profile.id; chat.preferences.model = model">{{ model }}</button><i v-if="!profile.available_models.length">尚未同步模型列表</i></div>
+          <div class="model-list">
+            <span v-for="model in profile.available_models" :key="model" class="model-item">
+              <button :class="{ selected: chat.preferences.model === model }" @click="chat.preferences.providerId = profile.id; chat.preferences.model = model">{{ model }}</button>
+              <button
+                class="vision-tag"
+                :class="{ active: supportsVision(profile.id, model) }"
+                :disabled="capabilityBusy === modelCapabilityKey(profile.id, model)"
+                title="标记该模型是否支持图片输入"
+                @click="toggleVision(profile.id, model)"
+              >{{ supportsVision(profile.id, model) ? '视觉 ON' : '视觉 OFF' }}</button>
+            </span>
+            <i v-if="!profile.available_models.length">尚未同步模型列表</i>
+          </div>
         </article>
         <p v-if="!profiles.length" class="no-profiles">配置第一个端点后，聊天页即可开始工作。</p>
       </section>
@@ -178,4 +220,5 @@ onMounted(async () => { await chat.restorePreferences(userId.value); await load(
 .settings{min-height:100vh;background:#141414;color:#eeece6;padding:44px clamp(22px,8vw,120px);font-family:Manrope,sans-serif}.settings header{max-width:720px;margin-bottom:52px}.back{border:0;background:transparent;color:#b3b0a8;padding:0;margin-bottom:50px;font:11px 'DM Mono';cursor:pointer}.back:hover{color:#d9ff36}.settings header p{color:#d9ff36;font:10px 'DM Mono';letter-spacing:.16em}.settings h1{font:600 clamp(46px,7vw,86px)/.95 'Playfair Display';letter-spacing:-.06em;margin:13px 0}.settings h1 em{color:#8d8b83}.settings header>span{display:block;color:#aaa69d;font-size:13px;margin-top:22px}.layout{display:grid;grid-template-columns:minmax(280px,.8fr) minmax(0,1.6fr);gap:70px;max-width:1200px}.form{background:#eeece6;color:#141414;padding:28px;align-self:start;box-shadow:8px 8px 0 #d9ff36}.form h2,.profiles h2{margin:0 0 22px;font-size:14px}.form label,.runtime-controls label{display:grid;gap:7px;font:10px 'DM Mono';letter-spacing:.08em;margin-top:16px}.form input,.runtime-controls select{border:0;border-bottom:1px solid #aaa79e;background:transparent;padding:9px 0;outline:0;font:13px Manrope}.form button{border:0;background:#141414;color:#fff;width:100%;padding:13px;margin-top:25px;font:700 12px Manrope;cursor:pointer}.profiles-head{display:flex;justify-content:space-between;border-bottom:1px solid #444;padding-bottom:12px}.profiles-head span{color:#d9ff36;font:12px 'DM Mono'}.runtime-controls{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;padding:8px 0 10px}.runtime-controls select{color:#f0eee7;border-color:#555}.runtime-controls output{float:right;color:#d9ff36}.runtime-controls input[type=range]{accent-color:#d9ff36;width:100%}.context-note,.apply-note{font:10px/1.6 'DM Mono';color:#88847c;margin:5px 0}.context-note{color:#aaa69d}.apply-note{margin-bottom:28px}.list-head{margin-top:10px}.profile{border-bottom:1px solid #333;padding:19px 0;display:grid;grid-template-columns:1fr auto;gap:14px}.profile p{margin:0 0 5px;font-weight:700}.profile code{color:#949188;font:10px 'DM Mono'}.profile-actions{display:flex;gap:7px}.profile-actions button{align-self:start;background:transparent;border:1px solid #555;color:#ddd;padding:7px 9px;font:10px 'DM Mono';cursor:pointer}.profile-actions button:hover{border-color:#d9ff36;color:#d9ff36}.profile-actions .remove{font-size:16px;padding:2px 8px}.model-list{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}.model-list button{border:1px solid #3a3a3a;background:transparent;padding:4px 7px;color:#cbc8bf;font:9px 'DM Mono';cursor:pointer}.model-list button.selected,.model-list button:hover{border-color:#d9ff36;color:#d9ff36}.model-list i,.no-profiles{color:#777;font:11px 'DM Mono';font-style:normal}.error{color:#ff7a70;font:11px 'DM Mono'}@media(max-width:750px){.settings{padding:27px 20px}.layout{grid-template-columns:1fr;gap:42px}.back{margin-bottom:32px}.runtime-controls{grid-template-columns:1fr}}
 .task-head{align-items:end;margin-top:38px}.task-head>div>p{margin:0 0 4px;color:#d9ff36;font:8px 'DM Mono';letter-spacing:.15em}.task-head h2{margin:0}.route-intro{max-width:580px;color:#8e8a82;font:10px/1.7 'DM Mono'}.route-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin:20px 0 38px;background:#414141;border:1px solid #414141}.route-card{position:relative;padding:18px;background:#191919;overflow:hidden}.route-card:after{position:absolute;right:-20px;top:-30px;color:#222;font:800 82px/1 Manrope;content:'+';pointer-events:none}.route-card-head{position:relative;z-index:1;display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:start}.route-card-head>b{display:grid;place-items:center;width:32px;height:32px;background:#d9ff36;color:#111;font:8px 'DM Mono'}.route-card h3{margin:0;color:#efede6;font-size:12px}.route-card p{margin:4px 0 0;color:#77736b;font:8px/1.5 'DM Mono'}.route-card label{position:relative;z-index:1;display:grid;gap:5px;margin-top:14px;color:#807d76;font:8px 'DM Mono';letter-spacing:.08em}.route-card select{width:100%;border:0;border-bottom:1px solid #474747;background:#191919;color:#d6d3cb;padding:7px 0;outline:0;font:10px Manrope}.route-actions{position:relative;z-index:1;display:flex;gap:7px;margin-top:16px}.route-actions button{border:1px solid #5b5b5b;background:transparent;color:#d9ff36;padding:7px 10px;font:8px 'DM Mono';cursor:pointer}.route-actions button:disabled{cursor:not-allowed;opacity:.35}.route-actions .route-clear{border-color:transparent;color:#777}@media(max-width:750px){.route-grid{grid-template-columns:1fr}}
 .settings header{position:relative;max-width:1120px}.settings header>p,.settings header>h1,.settings header>span{max-width:720px}.settings-nav{position:absolute;right:0;top:0;display:flex;border:1px solid #393939;padding:3px;white-space:nowrap}.settings-nav button{border:0;background:transparent;color:#74716b;padding:8px 14px;font:9px 'DM Mono';letter-spacing:.08em;cursor:pointer}.settings-nav button:hover{color:#eeece6}.settings-nav .active{background:#d9ff36;color:#111}@media(max-width:750px){.settings-nav{left:0;right:auto;top:42px}.settings .back{margin-bottom:75px}}
+.model-item{display:inline-flex;border:1px solid #3a3a3a}.model-item>button{border:0}.model-list .vision-tag{border-left:1px solid #3a3a3a;color:#6f6c65;font-size:7px}.model-list .vision-tag.active{background:#d9ff36;color:#111}.model-list .vision-tag:disabled{opacity:.4}
 </style>

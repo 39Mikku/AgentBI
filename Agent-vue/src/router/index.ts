@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { title: 'Obsidian · AgentBI', requiresAuth: true },
     },
     {
+      path: '/attachments',
+      name: 'attachments',
+      component: () => import('@/views/AttachmentsView.vue'),
+      meta: { title: '附件库 · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/live',
       name: 'live',
       component: () => import('@/views/LiveView.vue'),

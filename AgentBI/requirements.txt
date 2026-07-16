@@ -7,5 +7,7 @@ langchain-openai>=1.0,<2
 httpx>=0.28,<1
 beautifulsoup4>=4.12,<5
 html2text>=2025.4.15,<2027
+python-docx>=1.1,<2
+python-multipart>=0.0.9,<1
 python-dotenv>=1.0,<2
 websockets>=15,<16

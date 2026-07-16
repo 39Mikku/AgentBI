@@ -109,7 +109,7 @@ class ChatAgent:
 
     async def stream(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         provider: dict[str, Any],
         model: str,
         temperature: float,
@@ -299,7 +299,7 @@ class ChatAgent:
         wrapped = [dict(message) for message in messages]
         for index in range(len(wrapped) - 1, -1, -1):
             message = wrapped[index]
-            if message.get("role") != "user" or not isinstance(message.get("content"), str):
+            if message.get("role") != "user":
                 continue
             metadata = "\n".join([
                 f"current_time: {runtime.get('current_time', '')}",
@@ -307,7 +307,20 @@ class ChatAgent:
                 f"locale: {runtime.get('locale', 'zh-CN')}",
                 f"user_name: {runtime.get('user_name', '用户')}",
             ])
-            message["content"] = f"<runtime_context>\n{metadata}\n</runtime_context>\n\n<user_request>\n{message['content']}\n</user_request>"
+            content = message.get("content")
+            wrapper = f"<runtime_context>\n{metadata}\n</runtime_context>"
+            if isinstance(content, str):
+                message["content"] = f"{wrapper}\n\n<user_request>\n{content}\n</user_request>"
+            elif isinstance(content, list):
+                blocks = [dict(block) for block in content]
+                text = next((block for block in blocks if block.get("type") == "text"), None)
+                if text is not None:
+                    text["text"] = f"{wrapper}\n\n<user_request>\n{text.get('text', '')}\n</user_request>"
+                else:
+                    blocks.insert(0, {"type": "text", "text": wrapper})
+                message["content"] = blocks
+            else:
+                continue
             return wrapped
         return wrapped
 
@@ -329,7 +342,15 @@ class ChatAgent:
             instruction = json.loads(arguments or "{}").get("instruction", fallback)
         except json.JSONDecodeError:
             instruction = arguments or fallback
-        user_request = next((item["content"] for item in reversed(messages) if item.get("role") == "user"), "")
+        raw_request = next((item.get("content") for item in reversed(messages) if item.get("role") == "user"), "")
+        if isinstance(raw_request, list):
+            user_request = "\n".join(
+                str(block.get("text", ""))
+                for block in raw_request
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        else:
+            user_request = str(raw_request or "")
         return f"用户原始请求：{user_request}\n{fallback}：{instruction}"
 
     async def _search_history(self, arguments: str) -> str:

@@ -1,3 +1,5 @@
+import base64
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -86,3 +88,53 @@ class ModelTaskService:
         response = await self._client(provider).embeddings.create(model=route["model"], input=texts)
         vectors = [item.embedding for item in sorted(response.data, key=lambda item: item.index)]
         return f"{route['provider_id']}:{route['model']}", vectors
+
+    async def describe_images(
+        self, user_id: str, images: list[dict[str, Any]]
+    ) -> dict[str, str] | None:
+        resolved = self.resolve(user_id, "vision")
+        if not resolved or not images:
+            return None
+        route, provider = resolved
+        content: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": (
+                    "请逐张识别这些图片，完整转述文字、主体、布局、图表和与后续对话有关的细节。"
+                    "只返回 JSON 数组，每项包含 id 和 description。图片标签如下：\n"
+                    + "\n".join(f"{item['id']}: {item['filename']}" for item in images)
+                ),
+            }
+        ]
+        for item in images:
+            encoded = base64.b64encode(item["data"]).decode("ascii")
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{item['mime_type']};base64,{encoded}"},
+                }
+            )
+        response = await self._client(provider).chat.completions.create(
+            model=route["model"],
+            messages=[
+                {"role": "system", "content": "你是图像内容转述模型。"},
+                {"role": "user", "content": content},
+            ],
+            temperature=1.0,
+        )
+        text = response.choices[0].message.content.strip() if response.choices else ""
+        if not text:
+            raise ModelTaskEmptyResponseError("识图模型未返回可用转述")
+        try:
+            raw = text.strip().removeprefix("```json").removesuffix("```").strip()
+            parsed = json.loads(raw)
+            result = {
+                str(item["id"]): str(item["description"]).strip()
+                for item in parsed
+                if isinstance(item, dict) and item.get("id") and item.get("description")
+            }
+        except (TypeError, ValueError, json.JSONDecodeError):
+            result = {}
+        if not result:
+            result = {str(item["id"]): text for item in images}
+        return result

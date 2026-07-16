@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ModelRole = Literal["embedding", "compression", "memory", "title"]
+ModelRole = Literal["embedding", "compression", "memory", "title", "vision"]
 
 
 class ModelRouteUpdate(BaseModel):
@@ -13,4 +13,3 @@ class ModelRouteUpdate(BaseModel):
 class ModelRouteResponse(ModelRouteUpdate):
     user_id: str
     role: ModelRole
-

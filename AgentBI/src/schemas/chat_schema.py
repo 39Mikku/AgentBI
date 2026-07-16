@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from AgentBI.src.schemas.studio_asset_schema import StudioAssetResponse
 
 
 class ConversationCreate(BaseModel):
@@ -95,6 +97,7 @@ class ChatMessageResponse(BaseModel):
     sibling_index: int = 0
     version_ids: list[str] = Field(default_factory=list)
     model_snapshot: dict[str, Any] = Field(default_factory=dict)
+    assets: list[StudioAssetResponse] = Field(default_factory=list)
 
     @classmethod
     def from_document(cls, document: dict[str, Any]) -> "ChatMessageResponse":
@@ -114,6 +117,7 @@ class ChatMessageResponse(BaseModel):
             sibling_index=document.get("sibling_index", 0),
             version_ids=document.get("version_ids", []),
             model_snapshot=document.get("model_snapshot", {}),
+            assets=[StudioAssetResponse.from_document(item) for item in document.get("assets", [])],
         )
 
 
@@ -135,7 +139,8 @@ class MessageEditRequest(BaseModel):
 class ChatStreamRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=200)
     conversation_id: str
-    content: str = Field(min_length=1, max_length=30000)
+    content: str = Field(default="", max_length=30000)
+    attachment_ids: list[str] = Field(default_factory=list, max_length=8)
     provider_id: str | None = None
     model: str | None = Field(default=None, max_length=200)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -143,6 +148,12 @@ class ChatStreamRequest(BaseModel):
     user_name: str | None = Field(default=None, max_length=120)
     locale: str | None = Field(default=None, max_length=32)
     timezone: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def require_content_or_attachment(self):
+        if not self.content.strip() and not self.attachment_ids:
+            raise ValueError("消息内容和附件不能同时为空")
+        return self
 
 
 class ChatRetryStreamRequest(BaseModel):

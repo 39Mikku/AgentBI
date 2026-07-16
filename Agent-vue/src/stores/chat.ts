@@ -9,6 +9,7 @@ import type {
   ChatRuntimeContext,
   ChatTimelineEvent,
   Conversation,
+  StudioAsset,
 } from '@/api/chat-types'
 import { replaceTimelineBranch } from '@/utils/message-branch'
 import { toTimelineCard } from '@/utils/card-events'
@@ -372,8 +373,13 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function send(userId: string, content: string, runtime: ChatRuntimeContext) {
-    if (!content.trim() || generating.value) return
+  async function send(
+    userId: string,
+    content: string,
+    runtime: ChatRuntimeContext,
+    assets: StudioAsset[] = [],
+  ) {
+    if ((!content.trim() && !assets.length) || generating.value) return
     currentUserId = userId
     if (!activeId.value) await create(userId)
     messages.value.push({
@@ -383,6 +389,7 @@ export const useChatStore = defineStore('chat', () => {
       role: 'user',
       content,
       tool_events: [],
+      assets,
       status: 'complete',
     })
     await runGeneration(userId, (onEvent, signal) =>
@@ -391,6 +398,7 @@ export const useChatStore = defineStore('chat', () => {
           user_id: userId,
           conversation_id: activeId.value,
           content,
+          attachment_ids: assets.map((asset) => asset.id),
           ...preferences.value,
           ...runtime,
         },

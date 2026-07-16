@@ -163,6 +163,30 @@ class SqliteChatRepository:
                     user_id TEXT NOT NULL, role TEXT NOT NULL, provider_id TEXT NOT NULL, model TEXT NOT NULL,
                     updated_at TEXT NOT NULL, PRIMARY KEY(user_id, role)
                 );
+                CREATE TABLE IF NOT EXISTS model_capabilities (
+                    user_id TEXT NOT NULL, provider_id TEXT NOT NULL, model TEXT NOT NULL,
+                    supports_vision INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+                    PRIMARY KEY(user_id, provider_id, model)
+                );
+                CREATE INDEX IF NOT EXISTS model_capabilities_by_provider
+                    ON model_capabilities(provider_id, user_id);
+                CREATE TABLE IF NOT EXISTS studio_assets (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, source TEXT NOT NULL,
+                    kind TEXT NOT NULL, filename TEXT NOT NULL, mime_type TEXT NOT NULL,
+                    size INTEGER NOT NULL, storage_path TEXT, extracted_text TEXT,
+                    vision_summary TEXT, status TEXT NOT NULL DEFAULT 'ready',
+                    metadata_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL, deleted_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS studio_assets_by_user_created
+                    ON studio_assets(user_id, created_at DESC);
+                CREATE TABLE IF NOT EXISTS chat_message_assets (
+                    message_id TEXT NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+                    asset_id TEXT NOT NULL REFERENCES studio_assets(id), sort_order INTEGER NOT NULL,
+                    PRIMARY KEY(message_id, asset_id)
+                );
+                CREATE INDEX IF NOT EXISTS chat_message_assets_by_asset
+                    ON chat_message_assets(asset_id, message_id);
                 CREATE TABLE IF NOT EXISTS assistant_memories (
                     user_id TEXT NOT NULL, assistant_id TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '',
                     last_summarized_message_id TEXT, updated_at TEXT NOT NULL,
@@ -285,7 +309,174 @@ class SqliteChatRepository:
             item[name] = self._json_load(item[name], fallback)
         item["created_at"] = self._parse_time(item["created_at"])
         item["updated_at"] = self._parse_time(item["updated_at"])
+        item["assets"] = self.list_message_assets(item["_id"], item["user_id"])
         return item
+
+    def _asset_document(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if not row:
+            return None
+        item = dict(row)
+        item["_id"] = item.pop("id")
+        item["metadata"] = self._json_load(item.pop("metadata_json"), {})
+        item["url"] = f"/api/assets/{item['_id']}/content" if item.get("storage_path") else None
+        for name in ("created_at", "updated_at", "deleted_at"):
+            if item.get(name):
+                item[name] = self._parse_time(item[name])
+        return item
+
+    # Studio asset persistence ----------------------------------------------------
+
+    def create_asset(self, payload: dict[str, Any]) -> dict[str, Any]:
+        asset_id = payload.get("id") or self._id()
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO studio_assets(
+                    id, user_id, source, kind, filename, mime_type, size, storage_path,
+                    extracted_text, vision_summary, status, metadata_json,
+                    created_at, updated_at, deleted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)""",
+                (
+                    asset_id, payload["user_id"], payload.get("source", "uploaded"),
+                    payload["kind"], payload["filename"], payload["mime_type"],
+                    int(payload["size"]), payload.get("storage_path"),
+                    payload.get("extracted_text"), payload.get("vision_summary"),
+                    payload.get("status", "ready"), self._json_dump(payload.get("metadata", {})),
+                    now, now,
+                ),
+            )
+        return self.get_asset(asset_id, payload["user_id"])  # type: ignore[return-value]
+
+    def get_asset(self, asset_id: str, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._one(
+                "SELECT * FROM studio_assets WHERE id = ? AND user_id = ?",
+                (asset_id, user_id),
+            )
+        return self._asset_document(row)
+
+    def get_assets(self, asset_ids: list[str], user_id: str) -> list[dict[str, Any]]:
+        if not asset_ids:
+            return []
+        placeholders = ",".join("?" for _ in asset_ids)
+        with self._lock:
+            rows = self._all(
+                f"SELECT * FROM studio_assets WHERE user_id = ? AND id IN ({placeholders})",
+                (user_id, *asset_ids),
+            )
+        by_id = {str(row["id"]): self._asset_document(row) for row in rows}
+        return [by_id[item] for item in asset_ids if item in by_id and by_id[item] is not None]  # type: ignore[list-item]
+
+    def bind_message_assets(self, message_id: str, user_id: str, asset_ids: list[str]) -> None:
+        message = self._one(
+            "SELECT id FROM chat_messages WHERE id = ? AND user_id = ?",
+            (message_id, user_id),
+        )
+        assets = self.get_assets(asset_ids, user_id)
+        if not message or len(assets) != len(asset_ids) or any(item.get("deleted_at") for item in assets):
+            raise ValueError("附件不属于当前用户或已删除")
+        with self._lock, self._connection:
+            for index, asset_id in enumerate(asset_ids):
+                self._connection.execute(
+                    """INSERT INTO chat_message_assets(message_id, asset_id, sort_order)
+                    VALUES (?, ?, ?) ON CONFLICT(message_id, asset_id) DO UPDATE SET
+                    sort_order=excluded.sort_order""",
+                    (message_id, asset_id, index),
+                )
+
+    def copy_message_assets(self, source_message_id: str, target_message_id: str) -> None:
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT OR IGNORE INTO chat_message_assets(message_id, asset_id, sort_order)
+                SELECT ?, asset_id, sort_order FROM chat_message_assets WHERE message_id = ?""",
+                (target_message_id, source_message_id),
+            )
+
+    def list_message_assets(self, message_id: str, user_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._all(
+                """SELECT a.* FROM studio_assets a
+                JOIN chat_message_assets ma ON ma.asset_id = a.id
+                JOIN chat_messages m ON m.id = ma.message_id
+                WHERE ma.message_id = ? AND m.user_id = ?
+                ORDER BY ma.sort_order""",
+                (message_id, user_id),
+            )
+        return [self._asset_document(row) for row in rows]  # type: ignore[list-item]
+
+    def list_assets(
+        self,
+        user_id: str,
+        *,
+        kind: str | None = None,
+        source: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
+        clauses = ["a.user_id = ?", "a.deleted_at IS NULL"]
+        values: list[Any] = [user_id]
+        if kind:
+            clauses.append("a.kind = ?")
+            values.append(kind)
+        if source:
+            clauses.append("a.source = ?")
+            values.append(source)
+        if search:
+            clauses.append("(a.filename LIKE ? OR a.metadata_json LIKE ? OR t.title LIKE ?)")
+            needle = f"%{search}%"
+            values.extend((needle, needle, needle))
+        with self._lock:
+            rows = self._all(
+                f"""SELECT a.*, t.id AS source_conversation_id,
+                    t.title AS source_conversation_title, m.id AS source_message_id
+                FROM studio_assets a
+                JOIN chat_message_assets ma ON ma.asset_id = a.id
+                JOIN chat_messages m ON m.id = ma.message_id
+                JOIN chat_threads t ON t.id = m.thread_id
+                WHERE {' AND '.join(clauses)}
+                GROUP BY a.id ORDER BY a.created_at DESC""",
+                tuple(values),
+            )
+        return [self._asset_document(row) for row in rows]  # type: ignore[list-item]
+
+    def update_asset_derived_text(
+        self,
+        asset_id: str,
+        user_id: str,
+        *,
+        extracted_text: str | None = None,
+        vision_summary: str | None = None,
+    ) -> dict[str, Any] | None:
+        current = self.get_asset(asset_id, user_id)
+        if not current:
+            return None
+        assignments = ["updated_at = ?"]
+        values: list[Any] = [self._time()]
+        if extracted_text is not None:
+            assignments.append("extracted_text = ?")
+            values.append(extracted_text)
+        if vision_summary is not None:
+            assignments.append("vision_summary = ?")
+            values.append(vision_summary)
+        values.extend((asset_id, user_id))
+        with self._lock, self._connection:
+            self._connection.execute(
+                f"UPDATE studio_assets SET {', '.join(assignments)} WHERE id = ? AND user_id = ?",
+                tuple(values),
+            )
+        return self.get_asset(asset_id, user_id)
+
+    def tombstone_asset(self, asset_id: str, user_id: str) -> dict[str, Any] | None:
+        if not self.get_asset(asset_id, user_id):
+            return None
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """UPDATE studio_assets SET storage_path = NULL, extracted_text = NULL,
+                vision_summary = NULL, status = 'deleted', metadata_json = '{}',
+                deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ?""",
+                (now, now, asset_id, user_id),
+            )
+        return self.get_asset(asset_id, user_id)
 
     def _user_document(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
         if not row:
@@ -359,7 +550,11 @@ class SqliteChatRepository:
 
     def delete_provider(self, provider_id: str) -> bool:
         with self._lock, self._connection:
-            return bool(self._connection.execute("DELETE FROM provider_profiles WHERE id = ?", (provider_id,)).rowcount)
+            deleted = bool(self._connection.execute("DELETE FROM provider_profiles WHERE id = ?", (provider_id,)).rowcount)
+            if deleted:
+                self._connection.execute("DELETE FROM model_capabilities WHERE provider_id = ?", (provider_id,))
+                self._connection.execute("DELETE FROM model_routes WHERE provider_id = ?", (provider_id,))
+            return deleted
 
     def get_preferences(self, user_id: str) -> dict[str, Any]:
         with self._lock:
@@ -789,6 +984,51 @@ class SqliteChatRepository:
         with self._lock, self._connection:
             return bool(self._connection.execute("DELETE FROM model_routes WHERE user_id = ? AND role = ?", (user_id, role)).rowcount)
 
+    def set_model_capability(
+        self,
+        user_id: str,
+        provider_id: str,
+        model: str,
+        *,
+        supports_vision: bool,
+    ) -> dict[str, Any]:
+        now = self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO model_capabilities(user_id, provider_id, model, supports_vision, updated_at)
+                VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, provider_id, model) DO UPDATE SET
+                supports_vision=excluded.supports_vision, updated_at=excluded.updated_at""",
+                (user_id, provider_id, model, int(supports_vision), now),
+            )
+        return self.get_model_capability(user_id, provider_id, model)  # type: ignore[return-value]
+
+    def get_model_capability(
+        self, user_id: str, provider_id: str, model: str
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._one(
+                """SELECT * FROM model_capabilities
+                WHERE user_id = ? AND provider_id = ? AND model = ?""",
+                (user_id, provider_id, model),
+            )
+        if not row:
+            return None
+        item = dict(row)
+        item["supports_vision"] = bool(item["supports_vision"])
+        return item
+
+    def list_model_capabilities(self, user_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._all(
+                "SELECT * FROM model_capabilities WHERE user_id = ? ORDER BY provider_id, model",
+                (user_id,),
+            )
+        return [{**dict(row), "supports_vision": bool(row["supports_vision"])} for row in rows]
+
+    def model_supports_vision(self, user_id: str, provider_id: str, model: str) -> bool:
+        item = self.get_model_capability(user_id, provider_id, model)
+        return bool(item and item["supports_vision"])
+
     def find_user(self, identity: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._one("SELECT * FROM users WHERE email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE", (identity.strip(), identity.strip()))
@@ -1120,7 +1360,11 @@ class SqliteChatRepository:
     def edit_user_message(self, conversation_id: str, user_id: str, message_id: str, content: str) -> dict[str, Any] | None:
         thread = self.get_conversation(conversation_id, user_id)
         source = self._get_message(message_id, thread["_id"], user_id) if thread else None
-        return self._create_sibling(source, content, status="complete") if source and source.get("role") == "user" else None
+        if not source or source.get("role") != "user":
+            return None
+        message = self._create_sibling(source, content, status="complete")
+        self.copy_message_assets(source["_id"], message["_id"])
+        return self._get_message(message["_id"], message["thread_id"], user_id)
 
     def retry_assistant_message(self, conversation_id: str, user_id: str, message_id: str, model_snapshot: dict[str, Any] | None = None) -> dict[str, Any] | None:
         thread = self.get_conversation(conversation_id, user_id)
@@ -1257,6 +1501,7 @@ class SqliteChatRepository:
                 continue
             parent = self._get_message(source_to_copy[source["parent_id"]], copied["_id"], user_id)
             copied_message = self._insert_message(copied, parent, source["role"], source.get("content", ""), status=source.get("status", "complete"), sibling_group_id=source.get("sibling_group_id"), reasoning_summary=source.get("reasoning_summary"), tool_events=source.get("tool_events", []), timeline=source.get("timeline", []), model_snapshot=source.get("model_snapshot", {}))
+            self.copy_message_assets(source["_id"], copied_message["_id"])
             source_to_copy[source["_id"]] = copied_message["_id"]
             copied_active = copied_message["_id"]
         if copied_active:

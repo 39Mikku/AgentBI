@@ -13,6 +13,7 @@ from AgentBI.src.api.conversations import router as conversation_router
 from AgentBI.src.api.providers import router as provider_router
 from AgentBI.src.api.user_profile import router as user_profile_router
 from AgentBI.src.api.model_routes import router as model_route_router
+from AgentBI.src.api.model_capabilities import router as model_capability_router
 from AgentBI.src.api.assistants import router as assistant_router
 from AgentBI.src.api.music import router as music_router
 from AgentBI.src.api.capability_settings import router as capability_settings_router
@@ -24,6 +25,7 @@ from AgentBI.src.api.toolbox_auto_input import router as toolbox_auto_input_rout
 from AgentBI.src.api.toolbox_moegirl import router as toolbox_moegirl_router
 from AgentBI.src.api.tests import router as tests_router
 from AgentBI.src.api.image_generation import router as image_generation_router
+from AgentBI.src.api.studio_assets import router as studio_asset_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 from AgentBI.src.repositories.sqlite_test_repository import SqliteTestRepository
@@ -38,6 +40,7 @@ from AgentBI.src.services.toolbox.auto_input.service import AutoInputService
 from AgentBI.src.services.image_generation.artifact_store import ImageArtifactStore
 from AgentBI.src.services.image_generation.codex_oauth import CodexOAuthManager, CodexOAuthTokenStore
 from AgentBI.src.services.image_generation.service import ImageGenerationService
+from AgentBI.src.services.studio_asset_service import StudioAssetService
 
 logger = Logger.get_logger(__name__)
 
@@ -66,6 +69,11 @@ async def lifespan(app: FastAPI):
     app.state.file_time_service = FileTimeService()
     app.state.auto_input_service = AutoInputService()
     image_root = Path(__file__).resolve().parent / "data" / "generated-images"
+    app.state.studio_asset_service = StudioAssetService(
+        app.state.chat_repository,
+        Path(__file__).resolve().parent / "data" / "chat-attachments",
+        generated_root=image_root,
+    )
     oauth_store = CodexOAuthTokenStore(
         Path(__file__).resolve().parent / "data" / "codex-image-oauth.json"
     )
@@ -74,6 +82,7 @@ async def lifespan(app: FastAPI):
         repository=app.state.chat_repository,
         artifact_store=ImageArtifactStore(image_root, public_prefix="/api/generated-images"),
         oauth_store=oauth_store,
+        asset_service=app.state.studio_asset_service,
     )
     music_process = MusicApiProcessManager(
         enabled=os.getenv("NCM_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
@@ -103,6 +112,7 @@ app.include_router(router)
 app.include_router(provider_router)
 app.include_router(user_profile_router)
 app.include_router(model_route_router)
+app.include_router(model_capability_router)
 app.include_router(assistant_router)
 app.include_router(conversation_router)
 app.include_router(chat_router)
@@ -116,6 +126,7 @@ app.include_router(toolbox_auto_input_router)
 app.include_router(toolbox_moegirl_router)
 app.include_router(tests_router)
 app.include_router(image_generation_router)
+app.include_router(studio_asset_router)
 
 
 @app.get("/")

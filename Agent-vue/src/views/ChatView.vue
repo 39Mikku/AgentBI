@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ModelAvatar from '@/components/ModelAvatar.vue'
 import TimelineCard from '@/components/cards/TimelineCard.vue'
 import BilibiliPlayerModal from '@/components/BilibiliPlayerModal.vue'
 import AppModeSwitcher from '@/components/AppModeSwitcher.vue'
 import ToolEventDetails from '@/components/chat/ToolEventDetails.vue'
+import AttachmentComposer from '@/components/chat/AttachmentComposer.vue'
+import MessageAssets from '@/components/chat/MessageAssets.vue'
 import ImageSourcePicker from '@/components/ImageSourcePicker.vue'
 import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
 import { useAuthStore } from '@/stores/auth'
@@ -14,14 +16,19 @@ import { usePlayerStore } from '@/stores/player'
 import { renderMarkdown } from '@/utils/markdown'
 import { shouldRefreshUserProfile } from '@/utils/profile-refresh'
 import { createRuntimeContext } from '@/utils/runtime-context'
-import type { ChatMessage } from '@/api/chat-types'
+import { copyMarkdown } from '@/utils/clipboard'
+import type { ChatMessage, StudioAsset } from '@/api/chat-types'
 import type { BilibiliVideo } from '@/utils/bilibili-player'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const chat = useChatStore()
 const player = usePlayerStore()
 const input = ref('')
+const pendingAssets = ref<StudioAsset[]>([])
+const attachmentBusy = ref(false)
+const copiedMessageId = ref('')
 const menuOpen = ref(false)
 const assistantMenuOpen = ref(false)
 const profileOpen = ref(false)
@@ -70,6 +77,17 @@ function renderTimelineMarkdown(message: ChatMessage, source: string) {
     .map((event) => event.payload?.url)
     .filter((url): url is string => typeof url === 'string')
   return renderMarkdown(source, cardImageUrls)
+}
+
+function timelineCardPayload(message: ChatMessage, payload?: Record<string, unknown>) {
+  const result = { ...(payload || {}) }
+  const assetId = typeof result.asset_id === 'string' ? result.asset_id : ''
+  const asset = message.assets?.find((item) => item.id === assetId)
+  if (asset?.status === 'deleted' || asset?.deleted_at) {
+    result.deleted = true
+    result.url = ''
+  }
+  return result
 }
 
 function parseTimestamp(value?: string) {
@@ -124,8 +142,10 @@ function formatConversationDate(value?: string) {
 
 function send() {
   const value = input.value.trim()
-  if (value) {
+  if ((value || pendingAssets.value.length) && !attachmentBusy.value) {
+    const assets = [...pendingAssets.value]
     input.value = ''
+    pendingAssets.value = []
     void chat.send(
       userId.value,
       value,
@@ -134,6 +154,7 @@ function send() {
         navigator.language,
         Intl.DateTimeFormat().resolvedOptions().timeZone,
       ),
+      assets,
     )
   }
 }
@@ -171,6 +192,17 @@ function selectVersion(message: ChatMessage, direction: -1 | 1) {
 }
 function branchFrom(message: ChatMessage) {
   void chat.branch(userId.value, message.id)
+}
+async function copyReply(message: ChatMessage) {
+  try {
+    await copyMarkdown(message.content)
+    copiedMessageId.value = message.id
+    window.setTimeout(() => {
+      if (copiedMessageId.value === message.id) copiedMessageId.value = ''
+    }, 1600)
+  } catch (reason) {
+    chat.error = reason instanceof Error ? reason.message : '复制失败'
+  }
 }
 function openBilibiliVideo(video: BilibiliVideo) {
   activeBilibiliVideo.value = video
@@ -236,6 +268,9 @@ watch(
 )
 onMounted(async () => {
   await Promise.all([chat.load(userId.value), loadProfile()])
+  const requestedConversation = typeof route.query.conversation === 'string' ? route.query.conversation : ''
+  if (requestedConversation && requestedConversation !== chat.activeId)
+    await chat.select(requestedConversation, userId.value)
 })
 </script>
 
@@ -323,6 +358,7 @@ onMounted(async () => {
           ><b>›</b>
         </button>
         <button @click="router.push('/settings/models')">◈ 模型工作室</button>
+        <button @click="router.push('/attachments')">▧ 附件库</button>
         <button @click="router.push('/toolbox')">⌘ 工具箱</button>
         <button @click="logout">↗ 退出会话</button>
       </div>
@@ -389,6 +425,11 @@ onMounted(async () => {
                 message.status === 'streaming' ? '正在推演' : '完成'
               }}</span>
             </div>
+            <MessageAssets
+              v-if="message.role === 'user' && message.assets?.length"
+              :assets="message.assets"
+              :user-id="userId"
+            />
             <template v-if="message.role === 'assistant' && message.timeline?.length">
               <template v-for="(event, index) in message.timeline" :key="index">
                 <details v-if="event.type === 'reasoning_summary'" class="reasoning">
@@ -404,7 +445,7 @@ onMounted(async () => {
                 <TimelineCard
                   v-else-if="event.type === 'card'"
                   :kind="event.kind"
-                  :payload="event.payload"
+                  :payload="timelineCardPayload(message, event.payload)"
                   @play-bilibili="openBilibiliVideo"
                 />
                 <div
@@ -464,6 +505,9 @@ onMounted(async () => {
                 编辑
               </button>
               <button v-else title="重新生成此回答" @click="retryMessage(message)">重试</button>
+              <button v-if="message.role === 'assistant'" title="复制原始 Markdown" @click="copyReply(message)">
+                {{ copiedMessageId === message.id ? '已复制' : '复制 MD' }}
+              </button>
               <button title="从这里创建新会话" @click="branchFrom(message)">创建分支</button>
               <span v-if="(message.sibling_count || 1) > 1" class="version-switch">
                 <button
@@ -543,6 +587,12 @@ onMounted(async () => {
         </div>
         <p v-if="player.state.error" class="player-error">{{ player.state.error }}</p>
         <div class="composer">
+          <AttachmentComposer
+            v-model="pendingAssets"
+            :user-id="userId"
+            :disabled="chat.generating"
+            @busy="attachmentBusy = $event"
+          />
           <textarea
             v-model="input"
             rows="1"
@@ -552,7 +602,12 @@ onMounted(async () => {
           <div class="composer-actions">
             <span>Shift ↵ 换行</span
             ><button v-if="chat.activeGenerating" class="stop" @click="chat.stop">■ 停止</button
-            ><button v-else class="send" :disabled="chat.generating || !input.trim()" @click="send">→</button>
+            ><button
+              v-else
+              class="send"
+              :disabled="chat.generating || attachmentBusy || (!input.trim() && !pendingAssets.length)"
+              @click="send"
+            >→</button>
           </div>
         </div>
         <p class="disclaimer">OBSIDIAN 可以调用已连接的能力；请核对执行结果。</p>
