@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 class StudioAssetResponse(BaseModel):
     id: str
     source: Literal["uploaded", "generated"]
-    kind: Literal["image", "docx"]
+    kind: Literal["image", "docx", "video"]
     filename: str
     mime_type: str
     size: int

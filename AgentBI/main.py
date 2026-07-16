@@ -26,6 +26,7 @@ from AgentBI.src.api.toolbox_moegirl import router as toolbox_moegirl_router
 from AgentBI.src.api.tests import router as tests_router
 from AgentBI.src.api.image_generation import router as image_generation_router
 from AgentBI.src.api.studio_assets import router as studio_asset_router
+from AgentBI.src.api.video_generation import router as video_generation_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
 from AgentBI.src.repositories.sqlite_test_repository import SqliteTestRepository
@@ -41,6 +42,7 @@ from AgentBI.src.services.image_generation.artifact_store import ImageArtifactSt
 from AgentBI.src.services.image_generation.codex_oauth import CodexOAuthManager, CodexOAuthTokenStore
 from AgentBI.src.services.image_generation.service import ImageGenerationService
 from AgentBI.src.services.studio_asset_service import StudioAssetService
+from AgentBI.src.services.video_generation import AgnesVideoClient, VideoGenerationService
 
 logger = Logger.get_logger(__name__)
 
@@ -84,6 +86,16 @@ async def lifespan(app: FastAPI):
         oauth_store=oauth_store,
         asset_service=app.state.studio_asset_service,
     )
+    app.state.video_generation_service = VideoGenerationService(
+        repository=app.state.chat_repository,
+        client=AgnesVideoClient(
+            api_key=os.getenv("AGNES_API_KEY", ""),
+            base_url=os.getenv("AGNES_BASE_URL", "https://apihub.agnes-ai.com"),
+        ),
+        output_root=image_root,
+        asset_service=app.state.studio_asset_service,
+    )
+    await app.state.video_generation_service.start()
     music_process = MusicApiProcessManager(
         enabled=os.getenv("NCM_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
         port=int(os.getenv("NCM_API_PORT", "3300")),
@@ -99,6 +111,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await music_process.stop()
+        await app.state.video_generation_service.shutdown()
         app.state.test_repository.close()
         app.state.chat_repository.close()
         logger.info("销毁 AgentBI 服务生命周期")
@@ -127,6 +140,7 @@ app.include_router(toolbox_moegirl_router)
 app.include_router(tests_router)
 app.include_router(image_generation_router)
 app.include_router(studio_asset_router)
+app.include_router(video_generation_router)
 
 
 @app.get("/")

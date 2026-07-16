@@ -60,7 +60,7 @@ export interface CapabilitySettingField {
   type: 'number' | 'boolean' | 'text' | 'select'
   minimum?: number | null
   maximum?: number | null
-  options?: Array<{ label: string; value: string }>
+  options?: Array<{ label: string; value: string | number | boolean }>
 }
 
 export interface CapabilitySettings {
@@ -84,7 +84,7 @@ export interface ModelCapability {
 export interface StudioAsset {
   id: string
   source: 'uploaded' | 'generated'
-  kind: 'image' | 'docx'
+  kind: 'image' | 'docx' | 'video'
   filename: string
   mime_type: string
   size: number

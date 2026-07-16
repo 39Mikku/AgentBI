@@ -188,6 +188,18 @@ class SqliteChatRepository:
                 );
                 CREATE INDEX IF NOT EXISTS chat_message_assets_by_asset
                     ON chat_message_assets(asset_id, message_id);
+                CREATE TABLE IF NOT EXISTS video_generation_jobs (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, conversation_id TEXT,
+                    message_id TEXT, prompt TEXT NOT NULL, aspect_ratio TEXT NOT NULL,
+                    duration_seconds INTEGER NOT NULL, num_frames INTEGER NOT NULL,
+                    frame_rate INTEGER NOT NULL DEFAULT 24, provider_video_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0,
+                    asset_id TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS video_jobs_by_user_created
+                    ON video_generation_jobs(user_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS video_jobs_by_status
+                    ON video_generation_jobs(status, updated_at);
                 CREATE TABLE IF NOT EXISTS assistant_memories (
                     user_id TEXT NOT NULL, assistant_id TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '',
                     last_summarized_message_id TEXT, updated_at TEXT NOT NULL,
@@ -329,6 +341,75 @@ class SqliteChatRepository:
             if item.get(name):
                 item[name] = self._parse_time(item[name])
         return item
+
+    def _video_job_document(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if not row:
+            return None
+        item = dict(row)
+        item["_id"] = item.pop("id")
+        for name in ("created_at", "updated_at"):
+            item[name] = self._parse_time(item[name])
+        item["video_url"] = (
+            f"/api/assets/{item['asset_id']}/content" if item.get("asset_id") else None
+        )
+        return item
+
+    # Video generation persistence ---------------------------------------------
+
+    def create_video_generation_job(self, payload: dict[str, Any]) -> dict[str, Any]:
+        job_id, now = payload.get("id") or self._id(), self._time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                """INSERT INTO video_generation_jobs(
+                    id, user_id, conversation_id, message_id, prompt, aspect_ratio,
+                    duration_seconds, num_frames, frame_rate, provider_video_id,
+                    status, progress, asset_id, error, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'queued', 0, NULL, NULL, ?, ?)""",
+                (
+                    job_id, payload["user_id"], payload.get("conversation_id"),
+                    payload.get("message_id"), payload["prompt"], payload["aspect_ratio"],
+                    int(payload["duration_seconds"]), int(payload["num_frames"]),
+                    int(payload.get("frame_rate", 24)), now, now,
+                ),
+            )
+        return self.get_video_generation_job_by_id(job_id)  # type: ignore[return-value]
+
+    def get_video_generation_job_by_id(self, job_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            return self._video_job_document(
+                self._one("SELECT * FROM video_generation_jobs WHERE id = ?", (job_id,))
+            )
+
+    def get_video_generation_job(self, job_id: str, user_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            return self._video_job_document(
+                self._one(
+                    "SELECT * FROM video_generation_jobs WHERE id = ? AND user_id = ?",
+                    (job_id, user_id),
+                )
+            )
+
+    def update_video_generation_job(
+        self, job_id: str, fields: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        allowed = {"provider_video_id", "status", "progress", "asset_id", "error"}
+        values = {key: value for key, value in fields.items() if key in allowed}
+        if values:
+            assignments = [f"{key} = ?" for key in values]
+            params = [*values.values(), self._time(), job_id]
+            with self._lock, self._connection:
+                self._connection.execute(
+                    f"UPDATE video_generation_jobs SET {', '.join(assignments)}, updated_at = ? WHERE id = ?",
+                    tuple(params),
+                )
+        return self.get_video_generation_job_by_id(job_id)
+
+    def list_active_video_generation_jobs(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._all(
+                "SELECT * FROM video_generation_jobs WHERE status IN ('queued', 'in_progress') ORDER BY created_at ASC"
+            )
+        return [self._video_job_document(row) for row in rows]  # type: ignore[list-item]
 
     # Studio asset persistence ----------------------------------------------------
 

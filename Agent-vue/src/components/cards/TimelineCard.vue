@@ -5,6 +5,7 @@ import MusicTrackListCard from './MusicTrackListCard.vue'
 import BilibiliVideoCard from './BilibiliVideoCard.vue'
 import BilibiliVideoListCard from './BilibiliVideoListCard.vue'
 import ImageGenerationCard from './ImageGenerationCard.vue'
+import VideoGenerationCard from './VideoGenerationCard.vue'
 import type { MusicTrack } from '@/utils/music-player'
 import { isValidBvid, type BilibiliVideo } from '@/utils/bilibili-player'
 
@@ -54,6 +55,15 @@ const image = computed(() => ({
   height: typeof props.payload?.height === 'number' ? props.payload.height : null,
   deleted: props.payload?.deleted === true,
 }))
+const video = computed(() => ({
+  jobId: typeof props.payload?.job_id === 'string' ? props.payload.job_id : '',
+  prompt: typeof props.payload?.prompt === 'string' ? props.payload.prompt : undefined,
+  status: typeof props.payload?.status === 'string' ? props.payload.status as 'queued' | 'in_progress' | 'completed' | 'failed' : undefined,
+  progress: typeof props.payload?.progress === 'number' ? props.payload.progress : undefined,
+  aspectRatio: typeof props.payload?.aspect_ratio === 'string' ? props.payload.aspect_ratio : undefined,
+  durationSeconds: typeof props.payload?.duration_seconds === 'number' ? props.payload.duration_seconds : undefined,
+  model: typeof props.payload?.model === 'string' ? props.payload.model : undefined,
+}))
 </script>
 
 <template>
@@ -80,6 +90,16 @@ const image = computed(() => ({
     :width="image.width"
     :height="image.height"
     :deleted="image.deleted"
+  />
+  <VideoGenerationCard
+    v-else-if="kind === 'video.generation' && video.jobId"
+    :job-id="video.jobId"
+    :prompt="video.prompt"
+    :status="video.status"
+    :progress="video.progress"
+    :aspect-ratio="video.aspectRatio"
+    :duration-seconds="video.durationSeconds"
+    :model="video.model"
   />
   <div v-else class="unknown-card"><span>EXTENSION CARD</span><b>{{ kind || 'unknown' }}</b></div>
 </template>

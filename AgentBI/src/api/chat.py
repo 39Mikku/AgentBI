@@ -17,6 +17,7 @@ from AgentBI.src.services.memory_service import MemoryService, build_context_bun
 from AgentBI.src.api.music import get_music_client
 from AgentBI.src.services.netease_music_client import NeteaseMusicClient
 from AgentBI.src.services.image_generation.service import ImageGenerationService
+from AgentBI.src.services.video_generation.service import VideoGenerationService
 from AgentBI.src.services.model_task_service import ModelTaskConfigurationError
 from AgentBI.src.services.multimodal_context_service import MultimodalContextService
 
@@ -130,6 +131,7 @@ def stream_assistant(
     music_client: NeteaseMusicClient | None = None,
     bilibili_client: BilibiliClient | None = None,
     image_generation_service: ImageGenerationService | None = None,
+    video_generation_service: VideoGenerationService | None = None,
     asset_service: Any | None = None,
 ) -> AsyncIterator[str]:
     async def event_stream() -> AsyncIterator[str]:
@@ -156,6 +158,8 @@ def stream_assistant(
                 music_client,
                 bilibili_client,
                 image_generation_service=image_generation_service,
+                video_generation_service=video_generation_service,
+                assistant_message_id=str(assistant_message["_id"]),
             ).stream(context, provider, model, temperature, thinking_level, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":
@@ -303,8 +307,9 @@ async def stream_chat(request: Request, payload: ChatStreamRequest):
             bundle["summary"],
             get_music_client(request),
             BilibiliClient(),
-            getattr(request.app.state, "image_generation_service", None),
-            asset_service,
+            image_generation_service=getattr(request.app.state, "image_generation_service", None),
+            video_generation_service=getattr(request.app.state, "video_generation_service", None),
+            asset_service=asset_service,
         ),
         media_type="text/event-stream",
     )
@@ -362,8 +367,9 @@ async def retry_stream(request: Request, payload: ChatRetryStreamRequest):
             bundle["summary"],
             get_music_client(request),
             BilibiliClient(),
-            getattr(request.app.state, "image_generation_service", None),
-            getattr(request.app.state, "studio_asset_service", None),
+            image_generation_service=getattr(request.app.state, "image_generation_service", None),
+            video_generation_service=getattr(request.app.state, "video_generation_service", None),
+            asset_service=getattr(request.app.state, "studio_asset_service", None),
         ),
         media_type="text/event-stream",
     )
@@ -414,8 +420,9 @@ async def edit_stream(request: Request, payload: ChatEditStreamRequest):
             bundle["summary"],
             get_music_client(request),
             BilibiliClient(),
-            getattr(request.app.state, "image_generation_service", None),
-            getattr(request.app.state, "studio_asset_service", None),
+            image_generation_service=getattr(request.app.state, "image_generation_service", None),
+            video_generation_service=getattr(request.app.state, "video_generation_service", None),
+            asset_service=getattr(request.app.state, "studio_asset_service", None),
         ),
         media_type="text/event-stream",
     )

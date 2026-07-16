@@ -161,6 +161,43 @@ DIRECT_TOOLS = (
             "required": ["prompt", "aspect_ratio"],
         },
     ),
+    DirectToolRegistration(
+        capability_id="tool.video_generation",
+        display_name="视频生成",
+        description="使用 Agnes Video v2.0 发起异步文生视频任务，并在当前会话自动更新进度与成片。",
+        prompt=(
+            "当用户明确要求创建、生成或制作视频时调用 generate_video。"
+            "先把用户需求整理为完整、可直接用于文生视频的提示词，明确主体动作、场景、镜头运动、构图、光线、质感和时间变化。"
+            "当前能力仅支持文生视频，不要传入图片、负面提示词或其他未开放参数。"
+            "用户明确指定画幅或时长时按最接近的合法档位传入；未指定时省略对应参数，使用能力配置默认值。"
+        ),
+        tool_name="generate_video",
+        tool_description=(
+            "Start one asynchronous Agnes Video v2.0 text-to-video job. "
+            "Write a complete cinematic prompt that preserves the user's intent. "
+            "Only provide aspect ratio or duration when the request makes them clear; otherwise use configured defaults."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "A complete production-ready text-to-video prompt planned from the user's request.",
+                },
+                "aspect_ratio": {
+                    "type": "string",
+                    "enum": ["16:9", "9:16", "1:1", "4:3", "3:4"],
+                    "description": "Optional output aspect ratio when the user or composition makes it clear.",
+                },
+                "duration_seconds": {
+                    "type": "integer",
+                    "enum": [3, 5, 10, 18],
+                    "description": "Optional duration preset in seconds; choose the nearest preset requested by the user.",
+                },
+            },
+            "required": ["prompt"],
+        },
+    ),
 )
 
 _SUBAGENTS_BY_DELEGATE = {registration.delegate_name: registration for registration in SUBAGENTS}

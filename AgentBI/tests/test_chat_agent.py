@@ -10,7 +10,7 @@ class ChatAgentTests(unittest.TestCase):
         names = {tool["function"]["name"] for tool in ChatAgent.tool_definitions()}
         self.assertEqual(
             names,
-            {"delegate_email", "delegate_music", "delegate_bilibili", "search_web", "generate_image"},
+            {"delegate_email", "delegate_music", "delegate_bilibili", "search_web", "generate_image", "generate_video"},
         )
 
     def test_web_search_is_exposed_only_when_direct_tool_is_mounted(self):

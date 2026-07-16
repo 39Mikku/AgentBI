@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from AgentBI.src.schemas.image_generation_schema import ImageGenerationConfig
+from AgentBI.src.schemas.video_generation_schema import VideoGenerationConfig
 
 
 class EmptyCapabilityConfig(BaseModel):
@@ -39,6 +40,7 @@ CAPABILITY_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "agent.bilibili": BilibiliSubagentConfig,
     "tool.web_search": TavilySearchConfig,
     "tool.image_generation": ImageGenerationConfig,
+    "tool.video_generation": VideoGenerationConfig,
 }
 
 CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
@@ -138,6 +140,33 @@ CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
             ],
         },
     ],
+    "tool.video_generation": [
+        {
+            "key": "default_aspect_ratio",
+            "label": "默认画幅",
+            "description": "用户没有指定画幅时使用；主模型可按明确需求覆盖",
+            "type": "select",
+            "options": [
+                {"label": "16:9 横屏", "value": "16:9"},
+                {"label": "9:16 竖屏", "value": "9:16"},
+                {"label": "1:1 方形", "value": "1:1"},
+                {"label": "4:3 横屏", "value": "4:3"},
+                {"label": "3:4 竖屏", "value": "3:4"},
+            ],
+        },
+        {
+            "key": "default_duration_seconds",
+            "label": "默认时长",
+            "description": "用户没有指定时长时使用，系统自动映射为 Agnes 合法帧数",
+            "type": "select",
+            "options": [
+                {"label": "3 秒", "value": 3},
+                {"label": "5 秒", "value": 5},
+                {"label": "10 秒", "value": 10},
+                {"label": "18 秒", "value": 18},
+            ],
+        },
+    ],
 }
 
 
@@ -154,7 +183,7 @@ class CapabilitySettingsUpdate(BaseModel):
 
 class CapabilitySettingOption(BaseModel):
     label: str
-    value: str
+    value: str | int | float | bool
 
 
 class CapabilitySettingField(BaseModel):

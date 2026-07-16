@@ -58,7 +58,7 @@ def asset_content(asset_id: str, request: Request, user_id: str = Query(min_leng
         data = service.content_for(asset)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="附件文件不存在") from error
-    disposition = "inline" if asset["kind"] == "image" else "attachment"
+    disposition = "inline" if asset["kind"] in {"image", "video"} else "attachment"
     return Response(
         content=data,
         media_type=asset["mime_type"],

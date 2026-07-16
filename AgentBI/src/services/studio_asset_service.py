@@ -174,3 +174,29 @@ class StudioAssetService:
                 },
             }
         )
+
+    def register_generated_video(
+        self,
+        *,
+        user_id: str,
+        job_id: str,
+        relative_path: str,
+        size: int,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        path = self.generated_root / relative_path
+        if not path.is_file():
+            raise FileNotFoundError("生成视频文件不存在")
+        return self.repository.create_asset(
+            {
+                "id": job_id,
+                "user_id": user_id,
+                "source": "generated",
+                "kind": "video",
+                "filename": Path(relative_path).name,
+                "mime_type": "video/mp4",
+                "size": size,
+                "storage_path": relative_path,
+                "metadata": metadata or {},
+            }
+        )

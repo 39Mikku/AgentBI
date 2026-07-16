@@ -13,6 +13,7 @@ class ChatRouteTests(unittest.TestCase):
         from AgentBI.src.api.capability_settings import router as capability_settings_router
         from AgentBI.src.api.live import router as live_router
         from AgentBI.src.api.image_generation import router as image_generation_router
+        from AgentBI.src.api.video_generation import router as video_generation_router
 
         chat_paths = {route.path for route in chat_router.routes}
         conversation_paths = {route.path for route in conversation_router.routes}
@@ -24,6 +25,7 @@ class ChatRouteTests(unittest.TestCase):
         capability_settings_paths = {route.path for route in capability_settings_router.routes}
         live_paths = {route.path for route in live_router.routes}
         image_generation_paths = {route.path for route in image_generation_router.routes}
+        video_generation_paths = {route.path for route in video_generation_router.routes}
 
         self.assertIn("/chat/stream", chat_paths)
         self.assertIn("/conversations", conversation_paths)
@@ -51,6 +53,7 @@ class ChatRouteTests(unittest.TestCase):
         self.assertIn("/image-generation/generate", image_generation_paths)
         self.assertIn("/image-generation/codex/status", image_generation_paths)
         self.assertIn("/image-generation/codex/connect", image_generation_paths)
+        self.assertIn("/video-generation/jobs/{job_id}", video_generation_paths)
 
         from AgentBI.main import app
 

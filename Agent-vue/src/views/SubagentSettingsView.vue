@@ -26,6 +26,7 @@ const moduleIndex: Record<string, string> = {
   'agent.bilibili': 'BILI',
   'tool.web_search': 'WEB',
   'tool.image_generation': 'IMG',
+  'tool.video_generation': 'VID',
 }
 const capabilityGroups = computed(() => [
   {
@@ -185,7 +186,7 @@ onBeforeUnmount(() => {
               :max="field.maximum ?? undefined"
             />
             <select v-else-if="field.type === 'select'" v-model="item.config[field.key]">
-              <option v-for="option in field.options || []" :key="option.value" :value="option.value">{{ option.label }}</option>
+              <option v-for="option in field.options || []" :key="String(option.value)" :value="option.value">{{ option.label }}</option>
             </select>
             <input v-else-if="field.type === 'boolean'" v-model="item.config[field.key]" type="checkbox" />
             <input v-else v-model="item.config[field.key]" type="text" />
