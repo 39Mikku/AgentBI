@@ -193,6 +193,12 @@ class SqliteChatRepository:
                     message_id TEXT, prompt TEXT NOT NULL, aspect_ratio TEXT NOT NULL,
                     duration_seconds INTEGER NOT NULL, num_frames INTEGER NOT NULL,
                     frame_rate INTEGER NOT NULL DEFAULT 24, provider_video_id TEXT,
+                    provider TEXT NOT NULL DEFAULT 'agnes',
+                    model TEXT NOT NULL DEFAULT 'agnes-video-v2.0',
+                    resolution TEXT NOT NULL DEFAULT '720p',
+                    generate_audio INTEGER NOT NULL DEFAULT 0,
+                    watermark INTEGER NOT NULL DEFAULT 0,
+                    use_attached_image INTEGER NOT NULL DEFAULT 0,
                     status TEXT NOT NULL DEFAULT 'queued', progress INTEGER NOT NULL DEFAULT 0,
                     asset_id TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
@@ -240,6 +246,14 @@ class SqliteChatRepository:
             chat_preference_columns = {
                 "thinking_level": "TEXT NOT NULL DEFAULT 'medium'",
             }
+            video_job_columns = {
+                "provider": "TEXT NOT NULL DEFAULT 'agnes'",
+                "model": "TEXT NOT NULL DEFAULT 'agnes-video-v2.0'",
+                "resolution": "TEXT NOT NULL DEFAULT '720p'",
+                "generate_audio": "INTEGER NOT NULL DEFAULT 0",
+                "watermark": "INTEGER NOT NULL DEFAULT 0",
+                "use_attached_image": "INTEGER NOT NULL DEFAULT 0",
+            }
             for name, definition in assistant_columns.items():
                 self._ensure_column("assistants", name, definition)
             for name, definition in thread_columns.items():
@@ -248,6 +262,8 @@ class SqliteChatRepository:
                 self._ensure_column("live_preferences", name, definition)
             for name, definition in chat_preference_columns.items():
                 self._ensure_column("chat_preferences", name, definition)
+            for name, definition in video_job_columns.items():
+                self._ensure_column("video_generation_jobs", name, definition)
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         columns = {row[1] for row in self._connection.execute(f"PRAGMA table_info({table})")}
@@ -347,6 +363,8 @@ class SqliteChatRepository:
             return None
         item = dict(row)
         item["_id"] = item.pop("id")
+        for name in ("generate_audio", "watermark", "use_attached_image"):
+            item[name] = bool(item.get(name))
         for name in ("created_at", "updated_at"):
             item[name] = self._parse_time(item[name])
         item["video_url"] = (
@@ -363,13 +381,21 @@ class SqliteChatRepository:
                 """INSERT INTO video_generation_jobs(
                     id, user_id, conversation_id, message_id, prompt, aspect_ratio,
                     duration_seconds, num_frames, frame_rate, provider_video_id,
+                    provider, model, resolution, generate_audio, watermark, use_attached_image,
                     status, progress, asset_id, error, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'queued', 0, NULL, NULL, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'queued', 0, NULL, NULL, ?, ?)""",
                 (
                     job_id, payload["user_id"], payload.get("conversation_id"),
                     payload.get("message_id"), payload["prompt"], payload["aspect_ratio"],
                     int(payload["duration_seconds"]), int(payload["num_frames"]),
-                    int(payload.get("frame_rate", 24)), now, now,
+                    int(payload.get("frame_rate", 24)),
+                    payload.get("provider", "agnes"),
+                    payload.get("model", "agnes-video-v2.0"),
+                    payload.get("resolution", "720p"),
+                    int(bool(payload.get("generate_audio"))),
+                    int(bool(payload.get("watermark"))),
+                    int(bool(payload.get("use_attached_image"))),
+                    now, now,
                 ),
             )
         return self.get_video_generation_job_by_id(job_id)  # type: ignore[return-value]

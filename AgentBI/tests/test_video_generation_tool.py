@@ -31,9 +31,16 @@ class VideoGenerationToolTests(unittest.IsolatedAsyncioTestCase):
             prompt="A paper kite crossing a blue sky",
             aspect_ratio="9:16",
             duration_seconds=10,
+            use_attached_image=True,
+            reference_image_data_url="data:image/png;base64,aW1hZ2U=",
         )
 
         self.assertEqual(service.payload["message_id"], "message-1")
+        self.assertTrue(service.payload["use_attached_image"])
+        self.assertEqual(
+            service.payload["reference_image_data_url"],
+            "data:image/png;base64,aW1hZ2U=",
+        )
         self.assertEqual(result.card["kind"], "video.generation")
         self.assertEqual(result.card["payload"]["job_id"], "job-1")
         self.assertEqual(json.loads(result.content)["status"], "queued")
@@ -47,7 +54,7 @@ class VideoGenerationToolTests(unittest.IsolatedAsyncioTestCase):
         parameters = tools[0]["function"]["parameters"]
         self.assertEqual(
             set(parameters["properties"]),
-            {"prompt", "aspect_ratio", "duration_seconds"},
+            {"prompt", "aspect_ratio", "duration_seconds", "use_attached_image"},
         )
         self.assertEqual(parameters["required"], ["prompt"])
 
@@ -58,7 +65,10 @@ class VideoGenerationToolTests(unittest.IsolatedAsyncioTestCase):
         duration = tools[0]["function"]["parameters"]["properties"]["duration_seconds"]
 
         self.assertEqual(duration["type"], "string")
-        self.assertEqual(duration["enum"], ["3", "5", "10", "18"])
+        self.assertEqual(
+            duration["enum"],
+            ["3", "5", "10", "18"],
+        )
 
     async def test_chat_agent_invokes_video_service_with_current_message(self):
         from AgentBI.src.agents.chat_agent import ChatAgent

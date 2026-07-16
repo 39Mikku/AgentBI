@@ -4,6 +4,8 @@ from typing import Any
 
 import httpx
 
+from AgentBI.src.services.video_generation.provider import VideoCreateRequest
+
 
 class AgnesVideoError(RuntimeError):
     def __init__(self, message: str, *, retryable: bool = False):
@@ -12,6 +14,8 @@ class AgnesVideoError(RuntimeError):
 
 
 class AgnesVideoClient:
+    provider_id = "agnes"
+
     def __init__(
         self,
         api_key: str,
@@ -63,13 +67,21 @@ class AgnesVideoClient:
 
     async def create_video(
         self,
+        request: VideoCreateRequest | None = None,
         *,
-        prompt: str,
-        width: int,
-        height: int,
-        num_frames: int,
+        prompt: str | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        num_frames: int | None = None,
     ) -> dict[str, Any]:
         self._ensure_key()
+        if request is not None:
+            prompt = request.prompt
+            width = request.width
+            height = request.height
+            num_frames = request.num_frames
+        if not prompt or width is None or height is None or num_frames is None:
+            raise AgnesVideoError("Agnes 视频请求缺少画面尺寸或帧数")
         try:
             response = await self.http.post(
                 "/v1/videos",
@@ -88,6 +100,7 @@ class AgnesVideoClient:
         payload = self._payload(response)
         if not payload.get("video_id"):
             raise AgnesVideoError("Agnes 创建任务后未返回 video_id")
+        payload["task_id"] = str(payload["video_id"])
         return payload
 
     async def get_video(self, video_id: str) -> dict[str, Any]:
@@ -97,7 +110,9 @@ class AgnesVideoClient:
         except httpx.HTTPError as error:
             raise AgnesVideoError(f"查询 Agnes 任务失败：{error}", retryable=True) from error
         self._raise_for_status(response)
-        return self._payload(response)
+        payload = self._payload(response)
+        payload["task_id"] = str(payload.get("video_id") or video_id)
+        return payload
 
     async def download_video(self, url: str) -> bytes:
         try:
@@ -112,4 +127,3 @@ class AgnesVideoClient:
             await self.http.aclose()
         if self._owns_download:
             await self.download_http.aclose()
-

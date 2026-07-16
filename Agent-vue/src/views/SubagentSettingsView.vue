@@ -6,6 +6,8 @@ import * as settingsApi from '@/api/capability-settings'
 import type { CapabilitySettings } from '@/api/chat-types'
 import * as imageGenerationApi from '@/api/image-generation'
 import type { CodexImageOAuthStart, CodexImageOAuthStatus } from '@/api/image-generation-types'
+import type { CapabilitySettingField } from '@/api/chat-types'
+import { videoAspectRatioOptions, videoDurationOptions, videoResolutionOptions } from '@/utils/video-generation'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -44,6 +46,56 @@ const capabilityGroups = computed(() => [
     items: settings.value.filter((item) => item.kind === 'subagent'),
   },
 ].filter((group) => group.items.length))
+
+function videoModel(item: CapabilitySettings): string {
+  return String(item.config.model || 'agnes-video-v2.0')
+}
+
+function fieldOptions(item: CapabilitySettings, field: CapabilitySettingField) {
+  if (item.capability_id !== 'tool.video_generation') return field.options || []
+  if (field.key === 'default_aspect_ratio') {
+    const allowed = new Set(videoAspectRatioOptions(videoModel(item)))
+    return (field.options || []).filter((option) => allowed.has(String(option.value)))
+  }
+  if (field.key === 'default_duration_seconds') {
+    const allowed = new Set(videoDurationOptions(videoModel(item)))
+    return (field.options || []).filter((option) => allowed.has(Number(option.value)))
+  }
+  if (field.key === 'resolution') {
+    const allowed = new Set(videoResolutionOptions(videoModel(item)))
+    return (field.options || []).filter((option) => allowed.has(String(option.value)))
+  }
+  return field.options || []
+}
+
+function fieldVisible(item: CapabilitySettings, field: CapabilitySettingField): boolean {
+  if (item.capability_id === 'tool.image_generation') {
+    return field.key === 'mode'
+      || (field.key === 'lite_model' && item.config.mode === 'lite')
+      || (field.key === 'pro_quality' && item.config.mode === 'pro')
+  }
+  if (item.capability_id === 'tool.video_generation'
+    && ['resolution', 'watermark'].includes(field.key)) {
+    return videoModel(item) === 'doubao-seedance-1-0-pro-250528'
+  }
+  return true
+}
+
+function onFieldChange(item: CapabilitySettings, fieldKey: string) {
+  if (item.capability_id !== 'tool.video_generation' || fieldKey !== 'model') return
+  const durations = videoDurationOptions(videoModel(item))
+  const ratios = videoAspectRatioOptions(videoModel(item))
+  if (!durations.includes(Number(item.config.default_duration_seconds))) {
+    item.config.default_duration_seconds = 5
+  }
+  if (!ratios.includes(String(item.config.default_aspect_ratio))) {
+    item.config.default_aspect_ratio = '16:9'
+  }
+  if (!videoResolutionOptions(videoModel(item)).includes(String(item.config.resolution))) {
+    item.config.resolution = '720p'
+  }
+  item.config.generate_audio = false
+}
 
 async function load() {
   loading.value = true
@@ -169,12 +221,7 @@ onBeforeUnmount(() => {
         <div v-if="item.fields.length" class="field-list">
           <label
             v-for="field in item.fields"
-            v-show="
-              item.capability_id !== 'tool.image_generation' ||
-              field.key === 'mode' ||
-              (field.key === 'lite_model' && item.config.mode === 'lite') ||
-              (field.key === 'pro_quality' && item.config.mode === 'pro')
-            "
+            v-show="fieldVisible(item, field)"
             :key="field.key"
           >
             <span><strong>{{ field.label }}</strong><small>{{ field.description }}</small></span>
@@ -185,8 +232,8 @@ onBeforeUnmount(() => {
               :min="field.minimum ?? undefined"
               :max="field.maximum ?? undefined"
             />
-            <select v-else-if="field.type === 'select'" v-model="item.config[field.key]">
-              <option v-for="option in field.options || []" :key="String(option.value)" :value="option.value">{{ option.label }}</option>
+            <select v-else-if="field.type === 'select'" v-model="item.config[field.key]" @change="onFieldChange(item, field.key)">
+              <option v-for="option in fieldOptions(item, field)" :key="String(option.value)" :value="option.value">{{ option.label }}</option>
             </select>
             <input v-else-if="field.type === 'boolean'" v-model="item.config[field.key]" type="checkbox" />
             <input v-else v-model="item.config[field.key]" type="text" />

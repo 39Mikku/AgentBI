@@ -164,17 +164,20 @@ DIRECT_TOOLS = (
     DirectToolRegistration(
         capability_id="tool.video_generation",
         display_name="视频生成",
-        description="使用 Agnes Video v2.0 发起异步文生视频任务，并在当前会话自动更新进度与成片。",
+        description="使用 Agnes 或火山方舟 Seedance 发起异步视频生成，并在当前会话自动归档成片。",
         prompt=(
             "当用户明确要求创建、生成或制作视频时调用 generate_video。"
             "先把用户需求整理为完整、可直接用于文生视频的提示词，明确主体动作、场景、镜头运动、构图、光线、质感和时间变化。"
-            "当前能力仅支持文生视频，不要传入图片、负面提示词或其他未开放参数。"
+            "视频模型由能力配置决定；只有 Seedance 支持把当前用户消息中的附件图片作为首帧。"
+            "仅当用户明确要求参考、延续或让附件图片动起来时，才把 use_attached_image 设为 true。"
+            "不要传入负面提示词或其他未开放参数。"
             "用户明确指定画幅或时长时按最接近的合法档位传入；未指定时省略对应参数，使用能力配置默认值。"
         ),
         tool_name="generate_video",
         tool_description=(
-            "Start one asynchronous Agnes Video v2.0 text-to-video job. "
+            "Start one asynchronous video generation job using the configured provider. "
             "Write a complete cinematic prompt that preserves the user's intent. "
+            "Set use_attached_image only when the user explicitly wants the attached image animated or used as reference. "
             "Only provide aspect ratio or duration when the request makes them clear; otherwise use configured defaults."
         ),
         parameters={
@@ -186,13 +189,17 @@ DIRECT_TOOLS = (
                 },
                 "aspect_ratio": {
                     "type": "string",
-                    "enum": ["16:9", "9:16", "1:1", "4:3", "3:4"],
+                    "enum": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"],
                     "description": "Optional output aspect ratio when the user or composition makes it clear.",
                 },
                 "duration_seconds": {
                     "type": "string",
                     "enum": ["3", "5", "10", "18"],
                     "description": "Optional duration preset in seconds; choose the nearest preset requested by the user.",
+                },
+                "use_attached_image": {
+                    "type": "boolean",
+                    "description": "Use the image attached to the latest user message as the video reference only when the user explicitly requests image-to-video.",
                 },
             },
             "required": ["prompt"],

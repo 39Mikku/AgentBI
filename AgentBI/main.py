@@ -43,7 +43,11 @@ from AgentBI.src.services.image_generation.artifact_store import ImageArtifactSt
 from AgentBI.src.services.image_generation.codex_oauth import CodexOAuthManager, CodexOAuthTokenStore
 from AgentBI.src.services.image_generation.service import ImageGenerationService
 from AgentBI.src.services.studio_asset_service import StudioAssetService
-from AgentBI.src.services.video_generation import AgnesVideoClient, VideoGenerationService
+from AgentBI.src.services.video_generation import (
+    AgnesVideoClient,
+    ArkVideoClient,
+    VideoGenerationService,
+)
 
 logger = Logger.get_logger(__name__)
 
@@ -89,10 +93,18 @@ async def lifespan(app: FastAPI):
     )
     app.state.video_generation_service = VideoGenerationService(
         repository=app.state.chat_repository,
-        client=AgnesVideoClient(
-            api_key=os.getenv("AGNES_API_KEY", ""),
-            base_url=os.getenv("AGNES_BASE_URL", "https://apihub.agnes-ai.com"),
-        ),
+        providers={
+            "agnes": AgnesVideoClient(
+                api_key=os.getenv("AGNES_API_KEY", ""),
+                base_url=os.getenv("AGNES_BASE_URL", "https://apihub.agnes-ai.com"),
+            ),
+            "volcengine": ArkVideoClient(
+                api_key=os.getenv("ARK_API_KEY", ""),
+                base_url=os.getenv(
+                    "ARK_VIDEO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"
+                ),
+            ),
+        },
         output_root=image_root,
         asset_service=app.state.studio_asset_service,
     )

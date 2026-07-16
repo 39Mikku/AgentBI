@@ -142,6 +142,19 @@ CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
     ],
     "tool.video_generation": [
         {
+            "key": "model",
+            "label": "视频模型",
+            "description": "Agnes 仅支持文生视频；Seedance 1.0 Pro 支持文生视频及首帧图片生成视频",
+            "type": "select",
+            "options": [
+                {"label": "Agnes Video v2.0", "value": "agnes-video-v2.0"},
+                {
+                    "label": "豆包 Seedance 1.0 Pro",
+                    "value": "doubao-seedance-1-0-pro-250528",
+                },
+            ],
+        },
+        {
             "key": "default_aspect_ratio",
             "label": "默认画幅",
             "description": "用户没有指定画幅时使用；主模型可按明确需求覆盖",
@@ -152,12 +165,14 @@ CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
                 {"label": "1:1 方形", "value": "1:1"},
                 {"label": "4:3 横屏", "value": "4:3"},
                 {"label": "3:4 竖屏", "value": "3:4"},
+                {"label": "21:9 超宽屏", "value": "21:9"},
+                {"label": "自适应", "value": "adaptive"},
             ],
         },
         {
             "key": "default_duration_seconds",
             "label": "默认时长",
-            "description": "用户没有指定时长时使用，系统自动映射为 Agnes 合法帧数",
+            "description": "用户没有指定时长时使用；选项会随当前视频模型切换",
             "type": "select",
             "options": [
                 {"label": "3 秒", "value": 3},
@@ -165,6 +180,23 @@ CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
                 {"label": "10 秒", "value": 10},
                 {"label": "18 秒", "value": 18},
             ],
+        },
+        {
+            "key": "resolution",
+            "label": "输出分辨率",
+            "description": "Seedance 1.0 Pro 支持 480p / 720p；Agnes 继续使用固定尺寸映射",
+            "type": "select",
+            "options": [
+                {"label": "480p", "value": "480p"},
+                {"label": "720p", "value": "720p"},
+                {"label": "1080p", "value": "1080p"},
+            ],
+        },
+        {
+            "key": "watermark",
+            "label": "视频水印",
+            "description": "仅 Seedance 生效，默认关闭",
+            "type": "boolean",
         },
     ],
 }

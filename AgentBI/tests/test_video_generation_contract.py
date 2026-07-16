@@ -21,24 +21,78 @@ class VideoGenerationContractTests(unittest.TestCase):
         self.assertEqual(dimensions_for_aspect_ratio("4:3"), (1024, 768))
         self.assertEqual(dimensions_for_aspect_ratio("3:4"), (768, 1024))
 
-    def test_capability_config_has_only_default_ratio_and_duration(self):
+    def test_capability_config_defaults_to_agnes_and_accepts_seedance_settings(self):
         from AgentBI.src.schemas.capability_settings_schema import resolve_capability_config
 
         self.assertEqual(
             resolve_capability_config("tool.video_generation"),
-            {"default_aspect_ratio": "16:9", "default_duration_seconds": 5},
+            {
+                "model": "agnes-video-v2.0",
+                "default_aspect_ratio": "16:9",
+                "default_duration_seconds": 5,
+                "resolution": "720p",
+                "generate_audio": False,
+                "watermark": False,
+            },
         )
         self.assertEqual(
             resolve_capability_config(
                 "tool.video_generation",
-                {"default_aspect_ratio": "9:16", "default_duration_seconds": 10},
+                {
+                    "model": "doubao-seedance-1-0-pro-250528",
+                    "default_aspect_ratio": "adaptive",
+                    "default_duration_seconds": 10,
+                    "resolution": "720p",
+                    "generate_audio": False,
+                    "watermark": False,
+                },
             ),
-            {"default_aspect_ratio": "9:16", "default_duration_seconds": 10},
+            {
+                "model": "doubao-seedance-1-0-pro-250528",
+                "default_aspect_ratio": "adaptive",
+                "default_duration_seconds": 10,
+                "resolution": "720p",
+                "generate_audio": False,
+                "watermark": False,
+            },
         )
         with self.assertRaises(ValueError):
             resolve_capability_config(
                 "tool.video_generation",
-                {"default_aspect_ratio": "16:9", "default_duration_seconds": 7},
+                {
+                    "model": "agnes-video-v2.0",
+                    "default_aspect_ratio": "16:9",
+                    "default_duration_seconds": 7,
+                },
+            )
+
+    def test_unavailable_seedance_15_config_migrates_to_accessible_model(self):
+        from AgentBI.src.schemas.capability_settings_schema import resolve_capability_config
+
+        migrated = resolve_capability_config(
+            "tool.video_generation",
+            {
+                "model": "doubao-seedance-1-5-pro-251215",
+                "default_aspect_ratio": "adaptive",
+                "default_duration_seconds": 12,
+                "resolution": "1080p",
+                "generate_audio": True,
+                "watermark": False,
+            },
+        )
+
+        self.assertEqual(migrated["model"], "doubao-seedance-1-0-pro-250528")
+        self.assertEqual(migrated["default_duration_seconds"], 5)
+        self.assertEqual(migrated["resolution"], "720p")
+        self.assertFalse(migrated["generate_audio"])
+        with self.assertRaises(ValueError):
+            resolve_capability_config(
+                "tool.video_generation",
+                {
+                    "model": "doubao-seedance-1-0-pro-250528",
+                    "default_aspect_ratio": "16:9",
+                    "default_duration_seconds": 6,
+                },
             )
 
 

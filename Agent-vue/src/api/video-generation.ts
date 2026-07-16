@@ -6,8 +6,14 @@ export interface VideoGenerationJob {
   conversation_id?: string | null
   message_id?: string | null
   prompt: string
-  aspect_ratio: '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
-  duration_seconds: 3 | 5 | 10 | 18
+  provider: 'agnes' | 'volcengine'
+  model: string
+  aspect_ratio: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive'
+  duration_seconds: number
+  resolution: string
+  generate_audio: boolean
+  watermark: boolean
+  use_attached_image: boolean
   status: VideoGenerationStatus
   progress: number
   provider_video_id?: string | null

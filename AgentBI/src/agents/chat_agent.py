@@ -315,14 +315,14 @@ class ChatAgent:
                 aspect_ratio = payload.get("aspect_ratio")
                 if aspect_ratio is not None:
                     aspect_ratio = str(aspect_ratio)
-                    if aspect_ratio not in {"16:9", "9:16", "1:1", "4:3", "3:4"}:
-                        return "视频画幅仅支持 16:9、9:16、1:1、4:3 或 3:4。"
+                    if aspect_ratio not in {"16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"}:
+                        return "视频画幅参数不受支持。"
                 duration_seconds = payload.get("duration_seconds")
                 if duration_seconds is not None:
                     try:
                         duration_seconds = int(duration_seconds)
                     except (TypeError, ValueError):
-                        return "视频时长仅支持 3、5、10 或 18 秒。"
+                        return "视频时长必须是秒数。"
                     if duration_seconds not in {3, 5, 10, 18}:
                         return "视频时长仅支持 3、5、10 或 18 秒。"
                 return await generate_video(
@@ -333,6 +333,8 @@ class ChatAgent:
                     prompt=prompt,
                     aspect_ratio=aspect_ratio,
                     duration_seconds=duration_seconds,
+                    use_attached_image=bool(payload.get("use_attached_image")),
+                    reference_image_data_url=self.reference_image_data_url,
                 )
             return f"未知直接工具：{name}"
         except Exception as error:

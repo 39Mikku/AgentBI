@@ -15,6 +15,8 @@ async def generate_video(
     prompt: str,
     aspect_ratio: str | None = None,
     duration_seconds: int | None = None,
+    use_attached_image: bool = False,
+    reference_image_data_url: str | None = None,
 ) -> AtomicToolResult:
     job = await service.submit(
         user_id=user_id,
@@ -23,6 +25,8 @@ async def generate_video(
         prompt=prompt,
         aspect_ratio=aspect_ratio,
         duration_seconds=duration_seconds,
+        use_attached_image=use_attached_image,
+        reference_image_data_url=reference_image_data_url,
     )
     job_id = str(job["_id"])
     compact = {
@@ -42,7 +46,11 @@ async def generate_video(
                 "prompt": job["prompt"],
                 "aspect_ratio": job["aspect_ratio"],
                 "duration_seconds": job["duration_seconds"],
-                "model": "agnes-video-v2.0",
+                "provider": job.get("provider", "agnes"),
+                "model": job.get("model", "agnes-video-v2.0"),
+                "resolution": job.get("resolution", "720p"),
+                "generate_audio": bool(job.get("generate_audio")),
+                "use_attached_image": bool(job.get("use_attached_image")),
             },
         },
     )

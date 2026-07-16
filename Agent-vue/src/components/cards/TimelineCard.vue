@@ -62,6 +62,7 @@ const video = computed(() => ({
   progress: typeof props.payload?.progress === 'number' ? props.payload.progress : undefined,
   aspectRatio: typeof props.payload?.aspect_ratio === 'string' ? props.payload.aspect_ratio : undefined,
   durationSeconds: typeof props.payload?.duration_seconds === 'number' ? props.payload.duration_seconds : undefined,
+  provider: typeof props.payload?.provider === 'string' ? props.payload.provider : undefined,
   model: typeof props.payload?.model === 'string' ? props.payload.model : undefined,
 }))
 </script>
@@ -99,6 +100,7 @@ const video = computed(() => ({
     :progress="video.progress"
     :aspect-ratio="video.aspectRatio"
     :duration-seconds="video.durationSeconds"
+    :provider="video.provider"
     :model="video.model"
   />
   <div v-else class="unknown-card"><span>EXTENSION CARD</span><b>{{ kind || 'unknown' }}</b></div>
