@@ -31,7 +31,7 @@ type StoredPreferences = {
   model?: string | null
   temperature: number
   context_turns: number
-  thinking_level: 'low' | 'medium' | 'high'
+  thinking_level: 'off' | 'low' | 'medium' | 'high'
 }
 
 export async function getPreferences(userId: string): Promise<ChatPreferences> {

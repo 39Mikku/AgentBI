@@ -11,6 +11,13 @@ from AgentBI.src.schemas.toolbox_moegirl_schema import (
     MoegirlArtifactSummaryResponse,
     MoegirlFetchRequest,
     MoegirlFetchResponse,
+    MoegirlRefineRequest,
+)
+from AgentBI.src.api.dependencies import get_chat_repository
+from AgentBI.src.services.model_task_service import (
+    ModelTaskConfigurationError,
+    ModelTaskEmptyResponseError,
+    ModelTaskService,
 )
 from AgentBI.src.services.toolbox.moegirl.artifact_store import MoegirlArtifactStore
 from AgentBI.src.services.toolbox.moegirl.scraper import (
@@ -20,6 +27,11 @@ from AgentBI.src.services.toolbox.moegirl.scraper import (
     MoegirlValidationError,
 )
 from AgentBI.src.services.toolbox.moegirl.service import MoegirlArchiveService
+from AgentBI.src.services.toolbox.moegirl.refiner import (
+    AI_REFINEMENT_SYSTEM_PROMPT,
+    build_ai_refinement_prompt,
+    normalize_ai_markdown,
+)
 
 
 router = APIRouter(prefix="/toolbox/moegirl", tags=["toolbox-moegirl"])
@@ -41,6 +53,14 @@ def get_moegirl_archive_service(request: Request) -> MoegirlArchiveService:
     if service is None:
         service = MoegirlArchiveService(store=get_moegirl_artifact_store(request))
         request.app.state.moegirl_archive_service = service
+    return service
+
+
+def get_model_task_service(request: Request) -> ModelTaskService:
+    service = getattr(request.app.state, "model_task_service", None)
+    if service is None:
+        service = ModelTaskService(get_chat_repository(request))
+        request.app.state.model_task_service = service
     return service
 
 
@@ -108,6 +128,49 @@ def download_moegirl_artifact(
             "Content-Disposition": disposition,
         },
     )
+
+
+@router.post(
+    "/artifacts/{artifact_id}/refine",
+    response_model=MoegirlArtifactDocumentResponse,
+)
+async def refine_moegirl_artifact(
+    request: Request,
+    artifact_id: str,
+    payload: MoegirlRefineRequest,
+):
+    document = _require_artifact(request, payload.user_id, artifact_id)
+    try:
+        result = await get_model_task_service(request).complete_with_chat_preferences(
+            payload.user_id,
+            AI_REFINEMENT_SYSTEM_PROMPT,
+            build_ai_refinement_prompt(
+                document.title,
+                document.source_url,
+                document.markdown,
+            ),
+        )
+        markdown = normalize_ai_markdown(result.text)
+        if not markdown:
+            raise ModelTaskEmptyResponseError("模型未返回可用的 Markdown")
+    except ModelTaskConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ModelTaskEmptyResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI 精炼失败：{exc}") from exc
+
+    try:
+        updated = get_moegirl_artifact_store(request).replace_markdown(
+            payload.user_id,
+            artifact_id,
+            markdown,
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="AI 精炼结果写入失败") from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="萌娘百科归档不存在")
+    return updated
 
 
 @router.delete(

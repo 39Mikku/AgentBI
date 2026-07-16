@@ -16,6 +16,7 @@ class MusicSubagentConfig(BaseModel):
 
     search_result_limit: int = Field(default=3, ge=1, le=10)
     daily_result_limit: int = Field(default=10, ge=1, le=30)
+    liked_result_limit: int = Field(default=20, ge=1, le=100)
 
 
 class BilibiliSubagentConfig(BaseModel):
@@ -58,6 +59,14 @@ CAPABILITY_CONFIG_FIELDS: dict[str, list[dict[str, Any]]] = {
             "type": "number",
             "minimum": 1,
             "maximum": 30,
+        },
+        {
+            "key": "liked_result_limit",
+            "label": "红心歌曲数",
+            "description": "“我喜欢的音乐”卡片最多展示的歌曲数量",
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
         },
     ],
     "agent.bilibili": [

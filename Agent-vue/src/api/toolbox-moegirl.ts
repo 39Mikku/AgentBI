@@ -68,6 +68,20 @@ export const getMoegirlArtifact = (artifactId: string, userId: string, signal?: 
     signal ? { signal } : undefined,
   )
 
+export const refineMoegirlArtifact = (
+  artifactId: string,
+  userId: string,
+  signal?: AbortSignal,
+) => requestJson<MoegirlArtifactDocument>(
+  `/artifacts/${encodeURIComponent(artifactId)}/refine`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+    ...(signal ? { signal } : {}),
+  },
+)
+
 export async function downloadMoegirlArtifact(
   artifactId: string,
   userId: string,

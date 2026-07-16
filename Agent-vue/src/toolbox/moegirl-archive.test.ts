@@ -10,6 +10,7 @@ import {
   fetchMoegirlPage,
   getMoegirlArtifact,
   listMoegirlArtifacts,
+  refineMoegirlArtifact,
 } from '@/api/toolbox-moegirl'
 import {
   acceptArchiveResponse,
@@ -195,6 +196,22 @@ describe('Moegirl archive API client', () => {
       '/api/toolbox/moegirl/artifacts/a%2Fb?user_id=alice%2Barchive%40example.com',
     ])
     expect(fetchMock.mock.calls[2]?.[1]).toEqual({ method: 'DELETE' })
+  })
+
+  it('posts an existing artifact to the standalone AI refinement endpoint', async () => {
+    const document = { ...savedArtifact('a'), markdown: '# refined' }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(document), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(refineMoegirlArtifact('a/b', 'alice@example.com')).resolves.toEqual(document)
+    expect(fetchMock).toHaveBeenCalledWith('/api/toolbox/moegirl/artifacts/a%2Fb/refine', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: 'alice@example.com' }),
+    })
   })
 
   it('returns the Markdown Blob with the UTF-8 filename* download name', async () => {

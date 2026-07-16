@@ -18,7 +18,8 @@ import { shouldRefreshUserProfile } from '@/utils/profile-refresh'
 import { createRuntimeContext } from '@/utils/runtime-context'
 import { copyMarkdown } from '@/utils/clipboard'
 import { isGeminiThinkingModel, renderReasoningMarkdown } from '@/utils/gemini-thinking'
-import type { ChatMessage, ChatPreferences, StudioAsset } from '@/api/chat-types'
+import { normalizeReasoningLevel, reasoningChoices } from '@/utils/model-reasoning'
+import type { ChatMessage, StudioAsset } from '@/api/chat-types'
 import type { BilibiliVideo } from '@/utils/bilibili-player'
 
 const router = useRouter()
@@ -45,12 +46,8 @@ const previewTurn = ref(-1)
 const activeBilibiliVideo = ref<BilibiliVideo | null>(null)
 const userId = computed(() => auth.email || 'local-user')
 const modelLabel = computed(() => chat.preferences.model || '选择模型')
-const showThinkingControl = computed(() => isGeminiThinkingModel(chat.preferences.model))
-const thinkingLevels: Array<{ value: ChatPreferences['thinkingLevel']; label: string }> = [
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
-]
+const thinkingLevels = computed(() => reasoningChoices(chat.preferences.model))
+const showThinkingControl = computed(() => thinkingLevels.value.length > 0)
 const userName = computed(
   () =>
     profile.value?.username ||
@@ -59,6 +56,17 @@ const userName = computed(
 const userInitials = computed(() => userName.value.slice(0, 2).toUpperCase())
 const assistantName = computed(() => chat.activeAssistant?.name || '默认助手')
 const assistantInitials = computed(() => assistantName.value.slice(0, 2).toUpperCase())
+
+watch(
+  () => chat.preferences.model,
+  (model) => {
+    chat.preferences.thinkingLevel = normalizeReasoningLevel(
+      model,
+      chat.preferences.thinkingLevel,
+    )
+  },
+  { immediate: true },
+)
 const conversationTurns = computed(() => {
   const turns: Array<{ user?: ChatMessage; assistant?: ChatMessage }> = []
   for (const message of chat.messages) {
@@ -618,7 +626,7 @@ onMounted(async () => {
                 v-if="showThinkingControl"
                 class="thinking-control"
                 role="group"
-                aria-label="Gemini 推理强度"
+                aria-label="推理强度"
               >
                 <span>THINK</span>
                 <button

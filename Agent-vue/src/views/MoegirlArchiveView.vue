@@ -8,6 +8,7 @@ import {
   fetchMoegirlPage,
   getMoegirlArtifact,
   listMoegirlArtifacts,
+  refineMoegirlArtifact,
 } from '@/api/toolbox-moegirl'
 import type {
   MoegirlArtifactDocument,
@@ -36,7 +37,7 @@ interface PreviewState {
   message: string
 }
 
-type StateRequestKind = 'history' | 'fetch' | 'open' | 'delete'
+type StateRequestKind = 'history' | 'fetch' | 'open' | 'delete' | 'refine'
 
 interface StateRequest {
   generation: number
@@ -56,6 +57,7 @@ const fetching = ref(false)
 const opening = ref(false)
 const downloading = ref(false)
 const deleting = ref(false)
+const refining = ref(false)
 const error = ref('')
 const notice = ref('')
 
@@ -70,18 +72,20 @@ const canUseSavedActions = computed(() =>
   preview.value?.kind === 'saved' && Boolean(selectedArtifact.value),
 )
 const stateBusy = computed(() =>
-  historyLoading.value || fetching.value || opening.value || deleting.value,
+  historyLoading.value || fetching.value || opening.value || deleting.value || refining.value,
 )
 const fetchUnavailable = computed(() => archiveFetchUnavailable({
   fetching: fetching.value,
   opening: opening.value,
   deleting: deleting.value,
+  refining: refining.value,
 }))
 const deleteUnavailable = computed(() => archiveDeleteUnavailable({
   historyLoading: historyLoading.value,
   fetching: fetching.value,
   opening: opening.value,
   deleting: deleting.value,
+  refining: refining.value,
 }))
 
 function readableError(value: unknown): string {
@@ -123,6 +127,7 @@ function beginStateOperation(kind: StateRequestKind): StateRequest {
   fetching.value = kind === 'fetch'
   opening.value = kind === 'open'
   deleting.value = kind === 'delete'
+  refining.value = kind === 'refine'
   return { generation: archiveGeneration, signal: stateController.signal }
 }
 
@@ -137,6 +142,7 @@ function finishStateOperation(request: StateRequest) {
   fetching.value = false
   opening.value = false
   deleting.value = false
+  refining.value = false
 }
 
 function isAbortError(value: unknown): boolean {
@@ -247,6 +253,26 @@ async function downloadSelected() {
   }
 }
 
+async function refineSelected() {
+  const artifact = selectedArtifact.value
+  if (!artifact || stateBusy.value) return
+
+  resetFeedback()
+  const request = beginStateOperation('refine')
+  try {
+    const document = await refineMoegirlArtifact(artifact.id, userId.value, request.signal)
+    if (!requestAccepted(request)) return
+    history.value = [document, ...history.value.filter((item) => item.id !== document.id)]
+    selectedId.value = document.id
+    preview.value = documentPreview(document)
+    notice.value = `AI 精炼完成：${document.title}`
+  } catch (value) {
+    if (requestAccepted(request) && !isAbortError(value)) error.value = readableError(value)
+  } finally {
+    finishStateOperation(request)
+  }
+}
+
 async function deleteSelected() {
   const artifact = selectedArtifact.value
   if (!artifact || deleteUnavailable.value) return
@@ -302,7 +328,7 @@ onMounted(() => {
       </div>
       <aside>
         <b>网页正文 → Markdown</b>
-        <span>无 LLM · 本地持久化 · 按用户隔离</span>
+        <span>规则清洗 · AI 精炼可选 · 本地持久化</span>
         <span class="user-stamp">USER / {{ userId }}</span>
       </aside>
     </section>
@@ -372,7 +398,9 @@ onMounted(() => {
       </aside>
 
       <article class="preview-workspace">
-        <div v-if="opening" class="preview-loader"><i></i><span>OPENING ARCHIVE</span></div>
+        <div v-if="opening || refining" class="preview-loader">
+          <i></i><span>{{ refining ? 'AI REFINING ARCHIVE' : 'OPENING ARCHIVE' }}</span>
+        </div>
 
         <template v-if="preview">
           <header class="preview-header">
@@ -393,6 +421,9 @@ onMounted(() => {
               <div class="preview-actions">
                 <button type="button" :disabled="!canUseSavedActions || stateBusy" @click="refreshSelected">
                   <i>↻</i><span>{{ fetching ? 'REFRESHING' : 'REFRESH' }}</span>
+                </button>
+                <button type="button" :disabled="!canUseSavedActions || stateBusy" @click="refineSelected">
+                  <i>✦</i><span>{{ refining ? 'REFINING' : 'AI REFINE' }}</span>
                 </button>
                 <button type="button" :disabled="!canUseSavedActions || downloading || stateBusy" @click="downloadSelected">
                   <i>↓</i><span>{{ downloading ? 'PREPARING' : 'DOWNLOAD .MD' }}</span>

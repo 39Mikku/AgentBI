@@ -120,6 +120,31 @@ class MoegirlArtifactStoreTests(unittest.TestCase):
         self.assertEqual(document.content_sha256, expected_hash)
         self.assertEqual(document.markdown, second_markdown)
 
+    def test_replace_markdown_updates_only_existing_artifact_content(self):
+        artifact = self.store.save(
+            "alice",
+            "芽衣",
+            cleaned_page("雷电芽衣", "# 雷电芽衣\n\n原始内容"),
+            FIRST_TIME,
+        )
+
+        updated = self.store.replace_markdown(
+            "alice",
+            artifact.id,
+            "# 雷电芽衣\n\n## 背景故事\n\n精炼内容",
+            SECOND_TIME,
+        )
+
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated.id, artifact.id)
+        self.assertEqual(updated.requested_name, "芽衣")
+        self.assertEqual(updated.fetched_at, FIRST_TIME.isoformat())
+        self.assertEqual(updated.updated_at, SECOND_TIME.isoformat())
+        self.assertEqual(updated.markdown, "# 雷电芽衣\n\n## 背景故事\n\n精炼内容")
+        self.assertIsNone(
+            self.store.replace_markdown("alice", "f" * 24, "missing")
+        )
+
     def test_users_are_isolated(self):
         artifact = self.store.save(
             "alice", "可莉", cleaned_page("可莉", "content")

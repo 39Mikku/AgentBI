@@ -13,6 +13,7 @@ export interface ArchiveFetchState {
   fetching: boolean
   opening: boolean
   deleting: boolean
+  refining?: boolean
 }
 
 export interface ArchiveMutationState extends ArchiveFetchState {
@@ -20,11 +21,11 @@ export interface ArchiveMutationState extends ArchiveFetchState {
 }
 
 export function archiveDeleteUnavailable(state: ArchiveMutationState): boolean {
-  return state.historyLoading || state.fetching || state.opening || state.deleting
+  return state.historyLoading || state.fetching || state.opening || state.deleting || Boolean(state.refining)
 }
 
 export function archiveFetchUnavailable(state: ArchiveFetchState): boolean {
-  return state.fetching || state.opening || state.deleting
+  return state.fetching || state.opening || state.deleting || Boolean(state.refining)
 }
 
 export function beginArchiveRequest(currentGeneration: number): number {

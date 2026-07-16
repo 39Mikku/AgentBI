@@ -65,6 +65,78 @@ class NeteaseMusicClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tracks[0].cover_url, "https://img.test/cover.jpg")
         self.assertEqual(tracks[0].duration_ms, 123000)
 
+    async def test_search_forces_verified_weapi_transport(self):
+        captured = {}
+
+        def response(request):
+            captured.update(dict(request.url.params))
+            return 200, {"code": 200, "result": {"songs": []}}
+
+        client, http_client = _client_with_routes({"/cloudsearch": response})
+        try:
+            await client.search_tracks("night drive")
+        finally:
+            await http_client.aclose()
+
+        self.assertEqual(captured["crypto"], "weapi")
+        self.assertLess(int(captured["timeout"]), int(client.timeout * 1000))
+
+    async def test_liked_tracks_resolve_authenticated_liked_playlist_in_order(self):
+        captured = []
+
+        def capture(request, payload):
+            captured.append((request.url.path, dict(request.url.params)))
+            return 200, payload
+
+        client, http_client = _client_with_routes(
+            {
+                "/login/status": lambda request: capture(
+                    request,
+                    {"data": {"code": 200, "profile": {"userId": 77}}},
+                ),
+                "/user/playlist": lambda request: capture(
+                    request,
+                    {
+                        "code": 200,
+                        "playlist": [
+                            {"id": 800, "specialType": 0, "trackCount": 4},
+                            {"id": 900, "specialType": 5, "trackCount": 1026},
+                        ],
+                    },
+                ),
+                "/playlist/track/all": lambda request: capture(
+                    request,
+                    {
+                        "code": 200,
+                        "songs": [
+                            {
+                                "id": 1,
+                                "name": "Newest Like",
+                                "ar": [{"name": "Artist"}],
+                                "al": {"name": "Liked", "picUrl": "https://img.test/liked.jpg"},
+                            },
+                            {
+                                "id": 2,
+                                "name": "Older Like",
+                                "ar": [{"name": "Artist"}],
+                                "al": {"name": "Liked"},
+                            },
+                        ],
+                    },
+                ),
+            }
+        )
+        try:
+            tracks = await client.liked_tracks(limit=2)
+        finally:
+            await http_client.aclose()
+
+        self.assertEqual([track.id for track in tracks], ["1", "2"])
+        self.assertEqual(captured[0][0], "/login/status")
+        self.assertEqual(captured[1][1]["uid"], "77")
+        self.assertEqual(captured[2][1]["id"], "900")
+        self.assertEqual(captured[2][1]["limit"], "2")
+
     async def test_daily_recommendations_accepts_daily_songs_shape(self):
         client, http_client = _client_with_routes(
             {

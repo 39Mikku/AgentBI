@@ -24,6 +24,20 @@ class MoegirlFetchRequest(_StrictModel):
         return normalized
 
 
+class MoegirlRefineRequest(_StrictModel):
+    user_id: str = Field(min_length=1, max_length=320)
+
+    @field_validator("user_id", mode="before")
+    @classmethod
+    def normalize_user_id(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("字段不能为空")
+        return normalized
+
+
 class MoegirlArtifactSummaryResponse(_StrictModel):
     id: str = Field(pattern=r"^[a-f0-9]{24}$")
     requested_name: str

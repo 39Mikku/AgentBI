@@ -58,6 +58,14 @@ async def daily_recommendations(client: NeteaseMusicClient, limit: int = 10) -> 
     )
 
 
+async def liked_tracks(client: NeteaseMusicClient, limit: int = 20) -> MusicToolResult:
+    tracks = await client.liked_tracks(limit=limit)
+    return MusicToolResult(
+        content=_content(tracks) if tracks else "当前账号的红心歌单暂时没有可用歌曲。",
+        card=_card("music.track-list", "我喜欢的音乐", tracks) if tracks else None,
+    )
+
+
 async def resolve_track(client: NeteaseMusicClient, track_id: str) -> MusicToolResult:
     track = await client.resolve_track(track_id)
     return MusicToolResult(

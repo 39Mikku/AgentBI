@@ -14,6 +14,7 @@ from AgentBI.src.services.toolbox.moegirl.scraper import (
     MoegirlValidationError,
 )
 from AgentBI.src.services.toolbox.moegirl.service import MoegirlFetchResult
+from AgentBI.src.services.model_task_service import ModelTaskResult
 
 
 ARTIFACT_ID = "a" * 24
@@ -82,6 +83,34 @@ class FakeArtifactStore:
         del self.documents[artifact_id]
         return True
 
+    def replace_markdown(self, user_id, artifact_id, markdown):
+        document = self.get(user_id, artifact_id)
+        if document is None:
+            return None
+        updated = MoegirlArtifactDocument(
+            **{
+                **document.__dict__,
+                "markdown": markdown,
+                "character_count": len(markdown),
+                "content_sha256": "c" * 64,
+            }
+        )
+        self.documents[artifact_id] = updated
+        return updated
+
+
+class FakeModelTaskService:
+    def __init__(self):
+        self.request = None
+
+    async def complete_with_chat_preferences(self, user_id, system, prompt):
+        self.request = {"user_id": user_id, "system": system, "prompt": prompt}
+        return ModelTaskResult(
+            text="```markdown\n# 雷电芽衣\n\n## 经历\n\n保留的角色经历\n```",
+            provider_name="Test Provider",
+            model="test-model",
+        )
+
 
 class ToolboxMoegirlApiTests(unittest.TestCase):
     def setUp(self):
@@ -91,6 +120,8 @@ class ToolboxMoegirlApiTests(unittest.TestCase):
         app.state.moegirl_archive_service = FakeArchiveService()
         self.store = FakeArtifactStore()
         app.state.moegirl_artifact_store = self.store
+        self.model_task_service = FakeModelTaskService()
+        app.state.model_task_service = self.model_task_service
         app.include_router(router)
         self.client = TestClient(app)
 
@@ -132,6 +163,28 @@ class ToolboxMoegirlApiTests(unittest.TestCase):
             ).status_code,
             404,
         )
+
+    def test_ai_refine_rewrites_an_existing_archive_and_uses_roleplay_prompt(self):
+        response = self.client.post(
+            f"/toolbox/moegirl/artifacts/{ARTIFACT_ID}/refine",
+            json={"user_id": " alice "},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["markdown"], "# 雷电芽衣\n\n## 经历\n\n保留的角色经历")
+        self.assertEqual(self.model_task_service.request["user_id"], "alice")
+        self.assertIn("配音演员", self.model_task_service.request["system"])
+        self.assertIn("技能效果", self.model_task_service.request["system"])
+        self.assertIn("不是摘要任务", self.model_task_service.request["system"])
+        self.assertIn(DOCUMENT.markdown, self.model_task_service.request["prompt"])
+
+    def test_ai_refine_requires_an_existing_archive(self):
+        response = self.client.post(
+            f"/toolbox/moegirl/artifacts/{'f' * 24}/refine",
+            json={"user_id": "alice"},
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_download_returns_utf8_markdown_attachment_with_safe_filename(self):
         response = self.client.get(
@@ -226,6 +279,7 @@ class ToolboxMoegirlApiTests(unittest.TestCase):
                 "/toolbox/moegirl/artifacts": {"GET"},
                 "/toolbox/moegirl/artifacts/{artifact_id}": {"GET", "DELETE"},
                 "/toolbox/moegirl/artifacts/{artifact_id}/download": {"GET"},
+                "/toolbox/moegirl/artifacts/{artifact_id}/refine": {"POST"},
             },
         )
 

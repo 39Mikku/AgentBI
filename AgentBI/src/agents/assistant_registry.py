@@ -75,10 +75,13 @@ SUBAGENTS = (
     SubagentRegistration(
         capability_id="agent.music",
         display_name="音乐子代理",
-        description="搜索歌曲、获取每日推荐并推送可播放卡片。",
-        prompt="需要搜索歌曲、每日推荐或点歌时，调用 delegate_music 委派给音乐子代理。",
+        description="搜索歌曲、获取每日推荐或红心歌曲，并推送可播放卡片。",
+        prompt=(
+            "用户提供电影主题曲等描述而非具体歌名时，先调用 search_web 确认具体歌名和歌手；"
+            "确认后，或用户已经给出具体歌名时，再调用 delegate_music 委派给音乐子代理。"
+        ),
         delegate_name="delegate_music",
-        delegate_description="将搜索歌曲、每日推荐或点歌任务委派给音乐子代理。",
+        delegate_description="将搜索歌曲、每日推荐、红心歌曲或点歌任务委派给音乐子代理。",
         task_label="音乐任务",
         dependency="music_client",
         agent_module="AgentBI.src.agents.music_agent",

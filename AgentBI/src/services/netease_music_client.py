@@ -41,16 +41,63 @@ class NeteaseMusicClient:
         safe_limit = min(max(int(limit), 1), 10)
         payload = await self._request(
             "/cloudsearch",
-            params={"keywords": query.strip(), "limit": safe_limit, "type": 1},
+            params={
+                "keywords": query.strip(),
+                "limit": safe_limit,
+                "type": 1,
+                "crypto": "weapi",
+                "timeout": self._upstream_timeout_ms(),
+            },
         )
         songs = self._mapping(payload.get("result")).get("songs") or []
         return [self._normalize_track(song) for song in songs[:safe_limit] if isinstance(song, Mapping)]
 
     async def daily_recommendations(self, limit: int = 10) -> list[MusicTrack]:
         safe_limit = min(max(int(limit), 1), 30)
-        payload = await self._request("/recommend/songs")
+        payload = await self._request(
+            "/recommend/songs",
+            params={"crypto": "weapi", "timeout": self._upstream_timeout_ms()},
+        )
         data = self._mapping(payload.get("data"))
         songs = data.get("dailySongs") or payload.get("recommend") or []
+        return [self._normalize_track(song) for song in songs[:safe_limit] if isinstance(song, Mapping)]
+
+    async def liked_tracks(self, limit: int = 20) -> list[MusicTrack]:
+        safe_limit = min(max(int(limit), 1), 100)
+        status = await self._request("/login/status", params={"crypto": "weapi"})
+        data = self._mapping(status.get("data"))
+        profile = self._mapping(data.get("profile"))
+        account = self._mapping(data.get("account"))
+        user_id = profile.get("userId") or account.get("id")
+        if not user_id:
+            raise MusicAuthenticationError("网易云音乐 Cookie 已失效或未登录")
+
+        playlists = await self._request(
+            "/user/playlist",
+            params={"uid": str(user_id), "limit": 100, "offset": 0, "crypto": "weapi"},
+        )
+        liked_playlist = next(
+            (
+                item
+                for item in playlists.get("playlist") or []
+                if isinstance(item, Mapping) and str(item.get("specialType")) == "5"
+            ),
+            None,
+        )
+        if not liked_playlist or not liked_playlist.get("id"):
+            raise MusicApiError("没有找到当前账号的“我喜欢的音乐”歌单")
+
+        payload = await self._request(
+            "/playlist/track/all",
+            params={
+                "id": str(liked_playlist["id"]),
+                "limit": safe_limit,
+                "offset": 0,
+                "crypto": "weapi",
+                "timeout": self._upstream_timeout_ms(),
+            },
+        )
+        songs = payload.get("songs") or []
         return [self._normalize_track(song) for song in songs[:safe_limit] if isinstance(song, Mapping)]
 
     async def resolve_track(self, track_id: str) -> MusicTrack:
@@ -63,7 +110,12 @@ class NeteaseMusicClient:
     async def resolve_playback_url(self, track_id: str) -> MusicPlayback:
         payload = await self._request(
             "/song/url/v1",
-            params={"id": str(track_id), "level": self.audio_level},
+            params={
+                "id": str(track_id),
+                "level": self.audio_level,
+                "crypto": "weapi",
+                "timeout": self._upstream_timeout_ms(),
+            },
         )
         items = payload.get("data") or []
         item = items[0] if items and isinstance(items[0], Mapping) else {}
@@ -115,6 +167,9 @@ class NeteaseMusicClient:
     @staticmethod
     def _mapping(value: Any) -> Mapping[str, Any]:
         return value if isinstance(value, Mapping) else {}
+
+    def _upstream_timeout_ms(self) -> int:
+        return max(500, int(self.timeout * 1000) - 1000)
 
     @classmethod
     def _normalize_track(cls, song: Mapping[str, Any]) -> MusicTrack:

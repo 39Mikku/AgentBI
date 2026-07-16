@@ -43,6 +43,15 @@ class ChatAgentTests(unittest.TestCase):
         self.assertEqual(disabled, {"delegate_email"})
         self.assertEqual(enabled, {"delegate_music"})
 
+    def test_music_capability_tells_main_agent_to_resolve_descriptive_song_requests_first(self):
+        from AgentBI.src.agents.assistant_registry import capability_prompt
+
+        prompt = capability_prompt(["agent.music", "tool.web_search"])
+
+        self.assertIn("非具体歌名", prompt)
+        self.assertIn("search_web", prompt)
+        self.assertLess(prompt.index("search_web"), prompt.index("delegate_music"))
+
     def test_bilibili_delegation_is_exposed_only_when_capability_is_mounted(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
 
@@ -229,6 +238,56 @@ class ChatAgentGeminiThinkingTests(unittest.IsolatedAsyncioTestCase):
             {"thinking_level": "high", "include_thoughts": True},
         )
         self.assertEqual([event["type"] for event in events], ["delta", "reasoning_summary"])
+
+    async def test_tool_call_message_preserves_deepseek_reasoning_content(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        class Chunks:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if hasattr(self, "sent"):
+                    raise StopAsyncIteration
+                self.sent = True
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            delta=SimpleNamespace(
+                                content=None,
+                                reasoning_content="private reasoning state",
+                                tool_calls=[
+                                    SimpleNamespace(
+                                        index=0,
+                                        id="call-1",
+                                        function=SimpleNamespace(name="unknown_tool", arguments="{}"),
+                                    )
+                                ],
+                            )
+                        )
+                    ]
+                )
+
+        class Completions:
+            async def create(self, **kwargs):
+                return Chunks()
+
+        messages = [{"role": "user", "content": "question"}]
+        client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+        events = [
+            event
+            async for event in ChatAgent(capability_ids=[])._stream_tool_loop(
+                client,
+                messages,
+                "deepseek-v4-pro",
+                1.0,
+                {},
+                "high",
+            )
+        ]
+
+        self.assertEqual(messages[1]["reasoning_content"], "private reasoning state")
+        self.assertIn("reasoning_summary", [event["type"] for event in events])
 
 
 class ChatAgentWebSearchTests(unittest.IsolatedAsyncioTestCase):

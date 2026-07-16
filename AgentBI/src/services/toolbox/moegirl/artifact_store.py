@@ -160,6 +160,34 @@ class MoegirlArtifactStore:
 
         return summary
 
+    def replace_markdown(
+        self,
+        user_id: str,
+        artifact_id: str,
+        markdown: str,
+        updated_at: datetime | None = None,
+    ) -> MoegirlArtifactDocument | None:
+        existing = self.get(user_id, artifact_id)
+        if existing is None:
+            return None
+
+        cleaned = CleanedMoegirlPage(
+            title=existing.title,
+            source_url=existing.source_url,
+            markdown=markdown,
+            is_disambiguation=False,
+        )
+        summary = self.save(
+            user_id,
+            existing.requested_name,
+            cleaned,
+            updated_at,
+        )
+        return MoegirlArtifactDocument(
+            **summary.__dict__,
+            markdown=markdown,
+        )
+
     def delete(self, user_id: str, artifact_id: str) -> bool:
         artifact_dir = self._artifact_dir(user_id, artifact_id)
         if artifact_dir is None or not artifact_dir.is_dir():

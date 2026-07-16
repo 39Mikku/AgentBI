@@ -11,6 +11,7 @@ from AgentBI.src.schemas.capability_settings_schema import MusicSubagentConfig
 from AgentBI.src.tools.music_tools import (
     MusicToolResult,
     daily_recommendations,
+    liked_tracks,
     resolve_track,
     search_tracks,
 )
@@ -18,7 +19,7 @@ from AgentBI.src.tools.music_tools import (
 
 class MusicAgent:
     system_prompt = (
-        "你是音乐点播子代理。根据用户意图搜索歌曲、获取每日推荐或按歌曲 ID 获取详情。"
+        "你是音乐点播子代理。根据用户意图搜索歌曲、获取每日推荐、获取红心歌曲或按歌曲 ID 获取详情。"
         "必须通过工具获得真实歌曲数据，不得编造歌曲 ID。得到结果后用一句简短中文说明卡片内容。"
     )
 
@@ -52,6 +53,14 @@ class MusicAgent:
             {
                 "type": "function",
                 "function": {
+                    "name": "liked_tracks",
+                    "description": "获取当前固定网易云账号的红心歌曲，也就是“我喜欢的音乐”歌单。",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "resolve_track",
                     "description": "根据已确认的网易云歌曲 ID 获取一首歌的卡片。",
                     "parameters": {
@@ -76,6 +85,7 @@ class MusicAgent:
         ]
         for _ in range(3):
             content_parts: list[str] = []
+            reasoning_parts: list[str] = []
             tool_calls: dict[int, dict[str, str]] = {}
             response = await llm_client.chat.completions.create(
                 model=model,
@@ -94,6 +104,7 @@ class MusicAgent:
                     yield {"type": "delta", "content": delta.content}
                 reasoning = getattr(delta, "reasoning_content", None)
                 if reasoning:
+                    reasoning_parts.append(reasoning)
                     yield {"type": "reasoning_summary", "content": reasoning}
                 for tool_call in delta.tool_calls or []:
                     entry = tool_calls.setdefault(tool_call.index, {"id": "", "name": "", "arguments": ""})
@@ -105,8 +116,7 @@ class MusicAgent:
                         entry["arguments"] += tool_call.function.arguments
             if not tool_calls:
                 return
-            messages.append(
-                {
+            assistant_message = {
                     "role": "assistant",
                     "content": "".join(content_parts) or None,
                     "tool_calls": [
@@ -118,7 +128,9 @@ class MusicAgent:
                         for call in tool_calls.values()
                     ],
                 }
-            )
+            if reasoning_parts:
+                assistant_message["reasoning_content"] = "".join(reasoning_parts)
+            messages.append(assistant_message)
             for call in tool_calls.values():
                 yield {"type": "tool_started", "tool": self._tool_label(call["name"])}
                 result = await self._invoke_tool(call["name"], call["arguments"])
@@ -143,6 +155,8 @@ class MusicAgent:
                 return await search_tracks(self.client, query, self.settings.search_result_limit)
             if name == "daily_recommendations":
                 return await daily_recommendations(self.client, self.settings.daily_result_limit)
+            if name == "liked_tracks":
+                return await liked_tracks(self.client, self.settings.liked_result_limit)
             if name == "resolve_track":
                 return await resolve_track(self.client, str(payload.get("track_id", "")))
             return MusicToolResult(f"未知音乐工具: {name}")
@@ -154,5 +168,6 @@ class MusicAgent:
         return {
             "search_tracks": "搜索歌曲",
             "daily_recommendations": "每日推荐",
+            "liked_tracks": "红心歌曲",
             "resolve_track": "获取歌曲",
         }.get(name, name)

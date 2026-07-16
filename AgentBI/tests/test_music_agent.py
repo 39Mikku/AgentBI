@@ -5,6 +5,7 @@ class _FakeMusicClient:
     def __init__(self):
         self.search_limit = None
         self.daily_limit = None
+        self.liked_limit = None
 
     async def search_tracks(self, query, limit=3):
         from AgentBI.src.schemas.music_schema import MusicTrack
@@ -18,6 +19,12 @@ class _FakeMusicClient:
         self.daily_limit = limit
         return [MusicTrack(id="2", name="Daily Song", artists=["Artist"])]
 
+    async def liked_tracks(self, limit=20):
+        from AgentBI.src.schemas.music_schema import MusicTrack
+
+        self.liked_limit = limit
+        return [MusicTrack(id="3", name="Liked Song", artists=["Artist"])]
+
     async def resolve_track(self, track_id):
         from AgentBI.src.schemas.music_schema import MusicTrack
 
@@ -29,7 +36,10 @@ class MusicAgentTests(unittest.IsolatedAsyncioTestCase):
         from AgentBI.src.agents.music_agent import MusicAgent
 
         names = {tool["function"]["name"] for tool in MusicAgent.tool_definitions()}
-        self.assertEqual(names, {"search_tracks", "daily_recommendations", "resolve_track"})
+        self.assertEqual(
+            names,
+            {"search_tracks", "daily_recommendations", "liked_tracks", "resolve_track"},
+        )
 
     async def test_music_tool_result_contains_a_stable_card_without_cookie_or_playback_url(self):
         from AgentBI.src.agents.music_agent import MusicAgent
@@ -57,13 +67,20 @@ class MusicAgentTests(unittest.IsolatedAsyncioTestCase):
         from AgentBI.src.agents.music_agent import MusicAgent
 
         client = _FakeMusicClient()
-        agent = MusicAgent(client, settings={"search_result_limit": 5, "daily_result_limit": 12})
+        agent = MusicAgent(
+            client,
+            settings={"search_result_limit": 5, "daily_result_limit": 12, "liked_result_limit": 24},
+        )
 
         await agent._invoke_tool("search_tracks", '{"query":"Night"}')
         await agent._invoke_tool("daily_recommendations", "{}")
+        liked = await agent._invoke_tool("liked_tracks", "{}")
 
         self.assertEqual(client.search_limit, 5)
         self.assertEqual(client.daily_limit, 12)
+        self.assertEqual(client.liked_limit, 24)
+        self.assertEqual(liked.card["kind"], "music.track-list")
+        self.assertEqual(liked.card["payload"]["title"], "我喜欢的音乐")
 
 
 if __name__ == "__main__":

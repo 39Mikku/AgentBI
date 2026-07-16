@@ -45,6 +45,7 @@ class CapabilitySettingsSchemaTests(unittest.TestCase):
 
         self.assertEqual(MusicSubagentConfig().search_result_limit, 3)
         self.assertEqual(MusicSubagentConfig().daily_result_limit, 10)
+        self.assertEqual(MusicSubagentConfig().liked_result_limit, 20)
         self.assertEqual(BilibiliSubagentConfig().default_result_limit, 3)
         self.assertEqual(BilibiliSubagentConfig().creator_scan_limit, 20)
         self.assertEqual(TavilySearchConfig().max_results, 5)

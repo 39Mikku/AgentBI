@@ -23,7 +23,7 @@ from AgentBI.src.schemas.capability_settings_schema import resolve_capability_co
 from AgentBI.src.services.tavily_search_client import TavilySearchClient
 from AgentBI.src.tools.web_search_tools import search_web
 from AgentBI.src.services.image_generation.service import ImageGenerationService
-from AgentBI.src.services.gemini_thinking import gemini_request_options
+from AgentBI.src.services.model_reasoning import model_reasoning_request_options
 from AgentBI.src.tools.image_generation_tools import AtomicToolResult, generate_image
 
 
@@ -162,9 +162,10 @@ class ChatAgent:
     ) -> AsyncIterator[dict[str, Any]]:
         for _ in range(4):
             content_parts: list[str] = []
+            reasoning_parts: list[str] = []
             tool_calls: dict[int, dict[str, str]] = {}
             request: dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature, "stream": True}
-            request.update(gemini_request_options(model, thinking_level))
+            request.update(model_reasoning_request_options(model, thinking_level))
             if tools := self.tool_definitions(
                 self.capability_ids,
                 bool(self.assistant.get("history_search_enabled")),
@@ -181,6 +182,7 @@ class ChatAgent:
                     yield {"type": "delta", "content": delta.content}
                 reasoning = getattr(delta, "reasoning_content", None)
                 if reasoning:
+                    reasoning_parts.append(reasoning)
                     yield {"type": "reasoning_summary", "content": reasoning}
                 for tool_call in delta.tool_calls or []:
                     entry = tool_calls.setdefault(tool_call.index, {"id": "", "name": "", "arguments": ""})
@@ -193,7 +195,7 @@ class ChatAgent:
 
             if not tool_calls:
                 return
-            messages.append(self._assistant_tool_message(content_parts, tool_calls))
+            messages.append(self._assistant_tool_message(content_parts, tool_calls, reasoning_parts))
             for call in tool_calls.values():
                 registration = get_subagent_registration(call["name"])
                 if registration:
@@ -331,8 +333,12 @@ class ChatAgent:
         return wrapped
 
     @staticmethod
-    def _assistant_tool_message(content_parts: list[str], tool_calls: dict[int, dict[str, str]]) -> dict[str, Any]:
-        return {
+    def _assistant_tool_message(
+        content_parts: list[str],
+        tool_calls: dict[int, dict[str, str]],
+        reasoning_parts: list[str] | None = None,
+    ) -> dict[str, Any]:
+        message = {
             "role": "assistant",
             "content": "".join(content_parts) or None,
             "tool_calls": [{
@@ -341,6 +347,9 @@ class ChatAgent:
                 "function": {"name": call["name"], "arguments": call["arguments"]},
             } for call in tool_calls.values()],
         }
+        if reasoning_parts:
+            message["reasoning_content"] = "".join(reasoning_parts)
+        return message
 
     @staticmethod
     def _delegated_instruction(messages: list[dict[str, Any]], arguments: str, fallback: str) -> str:
