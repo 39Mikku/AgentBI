@@ -15,6 +15,10 @@ from AgentBI.src.schemas.toolbox_emoji_schema import (
 _CHINESE = re.compile(r"[\u3400-\u9fff]")
 _SAFE_NAME = re.compile(r"[^\u3400-\u9fffA-Za-z0-9]+")
 _SYSTEM = "你是表情包图片命名助手。只识别画面中可见的动作、情绪和文字，不猜测角色身份。"
+_TEXT_FIRST_RULE = (
+    "如果画面中有清晰可读的文字，必须直接使用该文字作为名称，不要改写或另行推断；"
+    "只有没有可读文字时，才按情绪或动作命名。"
+)
 
 
 def _json_payload(text: str) -> Any:
@@ -55,7 +59,7 @@ class StickerNamingService:
             _SYSTEM,
             (
                 f"按图片输入顺序分别对应这些 id：{labels}。为每张表情命名，"
-                "只使用简短中文，2 到 6 个汉字，优先描述情绪或动作。"
+                f"只使用简短中文，2 到 6 个汉字。{_TEXT_FIRST_RULE}"
                 '只返回 JSON：{"names":[{"id":"原 id","name":"中文名"}]}。'
             ),
             images,
@@ -93,7 +97,8 @@ class StickerNamingService:
                     user_id,
                     _SYSTEM,
                     (
-                        "为这一张表情命名，只使用简短中文，2 到 6 个汉字，优先描述情绪或动作。"
+                        "为这一张表情命名，只使用简短中文，2 到 6 个汉字。"
+                        f"{_TEXT_FIRST_RULE}"
                         '只返回 JSON：{"name":"中文名"}。'
                     ),
                     [image],

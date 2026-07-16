@@ -72,6 +72,19 @@ class StudioAssetApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_content_supports_unicode_filename(self):
+        asset = self.service.upload(
+            user_id="user-1", filename="角色设计图.png", content_type="image/png", data=PNG
+        )
+        with TestClient(self.client.app, raise_server_exceptions=False) as client:
+            response = client.get(
+                f"/assets/{asset['_id']}/content", params={"user_id": "user-1"}
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, PNG)
+        self.assertIn("filename*=utf-8''", response.headers["content-disposition"])
+
     def test_bound_user_image_can_be_reused_as_a_generation_reference(self):
         asset = self.service.upload(
             user_id="user-1", filename="character.png", content_type="image/png", data=PNG

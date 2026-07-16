@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { deleteAsset, uploadAsset } from '@/api/studio-assets'
 import type { StudioAsset } from '@/api/chat-types'
 import { assetContentUrl, formatAssetSize, validateAttachmentBatch } from '@/utils/chat-attachments'
+import { prepareImageFile } from '@/utils/image-source'
 
 const props = defineProps<{ userId: string; modelValue: StudioAsset[]; disabled?: boolean }>()
 const emit = defineEmits<{
@@ -14,26 +15,28 @@ const uploading = ref(false)
 const error = ref('')
 
 async function selectFiles(event: Event) {
-  const files = Array.from((event.target as HTMLInputElement).files || [])
+  const selectedFiles = Array.from((event.target as HTMLInputElement).files || [])
   ;(event.target as HTMLInputElement).value = ''
-  const combined = [
-    ...props.modelValue.map((asset) => ({
-      name: asset.filename,
-      size: asset.size,
-      type: asset.mime_type,
-    })),
-    ...files,
-  ]
-  const invalid = validateAttachmentBatch(combined)
-  if (invalid) {
-    error.value = invalid
-    return
-  }
-  if (!files.length) return
+  if (!selectedFiles.length) return
   error.value = ''
   uploading.value = true
   emit('busy', true)
   try {
+    const files = await Promise.all(
+      selectedFiles.map((file) =>
+        file.type.startsWith('image/') ? prepareImageFile(file) : Promise.resolve(file),
+      ),
+    )
+    const combined = [
+      ...props.modelValue.map((asset) => ({
+        name: asset.filename,
+        size: asset.size,
+        type: asset.mime_type,
+      })),
+      ...files,
+    ]
+    const invalid = validateAttachmentBatch(combined)
+    if (invalid) throw new Error(invalid)
     const uploaded = await Promise.all(files.map((file) => uploadAsset(props.userId, file)))
     emit('update:modelValue', [...props.modelValue, ...uploaded])
   } catch (reason) {

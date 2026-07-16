@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from AgentBI.src.schemas.studio_asset_schema import StudioAssetResponse
@@ -59,10 +61,17 @@ def asset_content(asset_id: str, request: Request, user_id: str = Query(min_leng
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="附件文件不存在") from error
     disposition = "inline" if asset["kind"] in {"image", "video"} else "attachment"
+    filename = asset["filename"]
+    encoded_filename = quote(filename)
+    content_disposition = (
+        f"{disposition}; filename*=utf-8''{encoded_filename}"
+        if encoded_filename != filename
+        else f'{disposition}; filename="{filename}"'
+    )
     return Response(
         content=data,
         media_type=asset["mime_type"],
-        headers={"Content-Disposition": f'{disposition}; filename="{asset["filename"]}"'},
+        headers={"Content-Disposition": content_disposition},
     )
 
 

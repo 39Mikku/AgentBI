@@ -4,6 +4,7 @@ export interface StickerPromptOptions {
   subject: string
   style: string
   includeText: boolean
+  hasReference?: boolean
 }
 
 export interface StickerBounds {
@@ -45,11 +46,14 @@ export const DEFAULT_CUT_OPTIONS: StickerCutOptions = {
 }
 
 export function buildStickerPrompt(options: StickerPromptOptions) {
+  const subject =
+    options.subject.trim() ||
+    (options.hasReference ? '参考图中的角色' : '一个适合日常聊天的原创角色')
   const textInstruction = options.includeText
     ? '每张贴纸配简短中文文字，文字必须清晰、自然并与情绪匹配。'
     : '禁止出现任何文字、字母、数字、字幕、气泡文案或水印。'
   return [
-    `为“${options.subject.trim()}”设计一整张 4×4 表情贴纸表，共 16 个互不重复的表情。`,
+    `为“${subject}”设计一整张 4×4 表情贴纸表，共 16 个互不重复的表情。`,
     `统一风格：${options.style.trim()}。`,
     '每个贴纸都是完整独立的小构图，角色造型保持一致，包含明显不同的情绪、动作和反应。',
     textInstruction,

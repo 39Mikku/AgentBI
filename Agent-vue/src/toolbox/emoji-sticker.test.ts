@@ -49,6 +49,25 @@ describe('emoji sticker pipeline', () => {
     expect(withoutText).not.toContain('每张贴纸配简短中文文字')
   })
 
+  it('uses a useful fallback when the subject is empty', () => {
+    const referenced = buildStickerPrompt({
+      subject: '',
+      style: '软萌漫画',
+      includeText: true,
+      hasReference: true,
+    })
+    const original = buildStickerPrompt({
+      subject: '   ',
+      style: '软萌漫画',
+      includeText: true,
+      hasReference: false,
+    })
+
+    expect(referenced).toContain('参考图中的角色')
+    expect(original).toContain('一个适合日常聊天的原创角色')
+    expect(referenced).not.toContain('“”')
+  })
+
   it('detects separated foreground components against the corner-sampled background', () => {
     const width = 14
     const height = 8

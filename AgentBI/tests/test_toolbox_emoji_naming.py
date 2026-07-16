@@ -30,7 +30,7 @@ class _IndividualTasks:
         self.max_active = 0
 
     async def complete_vision(self, user_id, system, prompt, images):
-        self.calls.append(images[0]["id"])
+        self.calls.append((images[0]["id"], prompt))
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         await asyncio.sleep(0.01)
@@ -61,6 +61,9 @@ class StickerNamingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.model, "vision-mini")
         self.assertEqual(len(tasks.calls), 1)
         self.assertIn("只使用简短中文", tasks.calls[0][2])
+        self.assertIn("有清晰可读的文字", tasks.calls[0][2])
+        self.assertIn("直接使用该文字", tasks.calls[0][2])
+        self.assertNotIn("优先描述情绪或动作", tasks.calls[0][2])
 
     async def test_individual_strategy_sends_one_image_per_call_with_bounded_concurrency(self):
         from AgentBI.src.services.toolbox.emoji_naming import StickerNamingService
@@ -77,6 +80,8 @@ class StickerNamingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(tasks.max_active, 3)
         self.assertEqual([item.id for item in result.names], [item["id"] for item in images])
         self.assertTrue(all(item.name == "开心挥手" for item in result.names))
+        self.assertTrue(all("有清晰可读的文字" in call[1] for call in tasks.calls))
+        self.assertTrue(all("优先描述情绪或动作" not in call[1] for call in tasks.calls))
 
     async def test_missing_or_non_chinese_names_use_stable_chinese_fallbacks(self):
         class Tasks:
