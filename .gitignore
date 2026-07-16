@@ -89,3 +89,11 @@ codex-image-oauth.json.tmp
 
 # ---------- 无关参考文件 ----------
 工具箱/
+code/
+
+# ---------- 编码代理临时文件 ----------
+.agents/
+.codex/
+.uploads/
+.superpowers/
+docs/
