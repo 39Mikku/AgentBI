@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ active: 'studio' | 'live' }>()
+defineProps<{ active: 'studio' | 'live' | 'test' }>()
 </script>
 
 <template>
@@ -10,13 +10,16 @@ defineProps<{ active: 'studio' | 'live' }>()
     <RouterLink to="/live" :class="{ active: active === 'live' }">
       <span class="mode-index">02</span><strong>Live</strong><i></i>
     </RouterLink>
+    <RouterLink to="/test" :class="{ active: active === 'test' }">
+      <span class="mode-index">03</span><strong>Test</strong><i></i>
+    </RouterLink>
   </nav>
 </template>
 
 <style scoped>
 .mode-switcher {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.035);
   padding: 3px;

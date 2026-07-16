@@ -35,6 +35,12 @@ const router = createRouter({
       meta: { title: 'Live · AgentBI', requiresAuth: true },
     },
     {
+      path: '/test',
+      name: 'test',
+      component: () => import('@/views/TestView.vue'),
+      meta: { title: 'Test Lab · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/toolbox',
       name: 'toolbox',
       component: () => import('@/views/ToolboxView.vue'),
@@ -57,6 +63,12 @@ const router = createRouter({
       name: 'auto-input-workbench',
       component: () => import('@/views/AutoInputView.vue'),
       meta: { title: 'Auto Type · AgentBI', requiresAuth: true },
+    },
+    {
+      path: '/toolbox/moegirl',
+      name: 'moegirl-archive',
+      component: () => import('@/views/MoegirlArchiveView.vue'),
+      meta: { title: 'Moe Archive · AgentBI', requiresAuth: true },
     },
     {
       path: '/settings/models',

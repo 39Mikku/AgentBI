@@ -1,10 +1,10 @@
-import os
 from dataclasses import dataclass
 from typing import Any
 
 from openai import AsyncOpenAI
 
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
+from AgentBI.src.services.openai_compatible_client import create_openai_compatible_client
 
 
 class ModelTaskConfigurationError(RuntimeError):
@@ -30,11 +30,7 @@ class ModelTaskService:
 
     @staticmethod
     def _client(provider: dict[str, Any]) -> AsyncOpenAI:
-        return AsyncOpenAI(
-            api_key=provider["api_key"],
-            base_url=provider["base_url"],
-            default_headers={"User-Agent": os.getenv("LLM_USER_AGENT", "Mozilla/5.0 AgentBI")},
-        )
+        return create_openai_compatible_client(provider)
 
     def resolve(self, user_id: str, role: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
         route = self.repository.get_model_route(user_id, role)

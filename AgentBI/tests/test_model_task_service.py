@@ -1,3 +1,4 @@
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -44,6 +45,40 @@ class _EmptyCompletions(_Completions):
 
 
 class ModelTaskServiceTests(unittest.IsolatedAsyncioTestCase):
+    def test_neutral_client_factory_preserves_provider_and_user_agent(self):
+        from AgentBI.src.services.openai_compatible_client import (
+            create_openai_compatible_client,
+        )
+
+        provider = _Repository().get_provider("provider-1")
+        sentinel = object()
+        with patch.dict(os.environ, {"LLM_USER_AGENT": "AgentBI-Test-UA"}), patch(
+            "AgentBI.src.services.openai_compatible_client.AsyncOpenAI",
+            return_value=sentinel,
+        ) as constructor:
+            result = create_openai_compatible_client(provider)
+
+        self.assertIs(result, sentinel)
+        constructor.assert_called_once_with(
+            api_key="test",
+            base_url="https://example.invalid/v1",
+            default_headers={"User-Agent": "AgentBI-Test-UA"},
+        )
+
+    def test_client_compatibility_wrapper_uses_neutral_factory(self):
+        from AgentBI.src.services.model_task_service import ModelTaskService
+
+        provider = _Repository().get_provider("provider-1")
+        sentinel = object()
+        with patch(
+            "AgentBI.src.services.model_task_service.create_openai_compatible_client",
+            return_value=sentinel,
+        ) as factory:
+            result = ModelTaskService._client(provider)
+
+        self.assertIs(result, sentinel)
+        factory.assert_called_once_with(provider)
+
     async def test_text_background_models_use_provider_recommended_default_temperature(self):
         from AgentBI.src.services.model_task_service import ModelTaskService
 

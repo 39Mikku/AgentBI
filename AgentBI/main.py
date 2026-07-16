@@ -20,9 +20,14 @@ from AgentBI.src.api.toolbox_tts import router as toolbox_tts_router
 from AgentBI.src.api.toolbox_system import router as toolbox_system_router
 from AgentBI.src.api.toolbox_file_time import router as toolbox_file_time_router
 from AgentBI.src.api.toolbox_auto_input import router as toolbox_auto_input_router
+from AgentBI.src.api.toolbox_moegirl import router as toolbox_moegirl_router
+from AgentBI.src.api.tests import router as tests_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
+from AgentBI.src.repositories.sqlite_test_repository import SqliteTestRepository
 from AgentBI.src.services.music_api_process import MusicApiProcessManager
+from AgentBI.src.services.test_model_service import TestModelService
+from AgentBI.src.services.test_service import TestService
 from AgentBI.src.services.toolbox.tts.registry import TtsProviderRegistry
 from AgentBI.src.services.toolbox.tts.bailian_voice_enrollment import BailianLiveVoiceEnrollmentAdapter
 from AgentBI.src.services.toolbox.directory_picker import NativeDirectoryPicker
@@ -37,6 +42,16 @@ async def lifespan(app: FastAPI):
     load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
     sqlite_path = os.getenv("CHAT_SQLITE_PATH") or str(Path(__file__).resolve().parent / "data" / "agentbi.sqlite3")
     app.state.chat_repository = SqliteChatRepository(sqlite_path)
+    app.state.test_repository = SqliteTestRepository(sqlite_path)
+    app.state.test_model_service = TestModelService(
+        app.state.test_repository, app.state.chat_repository
+    )
+    app.state.test_service = TestService(
+        app.state.test_repository,
+        app.state.chat_repository,
+        app.state.test_model_service,
+    )
+    app.state.test_service.recover_stale_work()
     app.state.tts_provider_registry = TtsProviderRegistry.from_environment()
     app.state.live_voice_enrollment_adapter = BailianLiveVoiceEnrollmentAdapter(
         api_key=os.getenv("DASHSCOPE_API_KEY", ""),
@@ -60,6 +75,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await music_process.stop()
+        app.state.test_repository.close()
         app.state.chat_repository.close()
         logger.info("销毁 AgentBI 服务生命周期")
 
@@ -79,6 +95,8 @@ app.include_router(toolbox_tts_router)
 app.include_router(toolbox_system_router)
 app.include_router(toolbox_file_time_router)
 app.include_router(toolbox_auto_input_router)
+app.include_router(toolbox_moegirl_router)
+app.include_router(tests_router)
 
 
 @app.get("/")
