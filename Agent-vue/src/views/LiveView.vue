@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
 import type { LiveModelId } from '@/api/live-types'
 import { listTtsVoices } from '@/api/toolbox-tts'
@@ -20,6 +21,7 @@ import { availableLiveVoices } from '@/toolbox/voice-workbench'
 
 const auth = useAuthStore()
 const live = useLiveStore()
+const router = useRouter()
 const userId = computed(() => auth.email || 'local-user')
 const userName = computed(() => auth.profile?.username || userId.value.split('@')[0] || userId.value)
 const userInitials = computed(() => roleInitials(userName.value))
@@ -225,7 +227,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="live-shell" :data-phase="live.state.phase">
     <aside class="workspace-rail">
-      <div class="live-brand"><span class="brand-mark"><i></i></span><span>OBSIDIAN</span><b>LIVE</b></div>
+      <button class="live-brand" type="button" title="返回主页" @click="router.push('/home')"><span class="brand-mark"><i></i></span><span>OBSIDIAN</span><b>LIVE</b></button>
       <AppModeSwitcher active="live" />
 
       <div class="rail-label"><span>当前角色</span><button :disabled="live.isActive" @click="openSettings('role')">管理</button></div>
@@ -461,7 +463,7 @@ onBeforeUnmount(() => {
 .live-shell::after { content:''; position:fixed; inset:0; z-index:20; pointer-events:none; opacity:.12; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitchTiles'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E"); mix-blend-mode:soft-light; }
 button,input,textarea { font:inherit; } button { cursor:pointer; } button:disabled { cursor:not-allowed; opacity:.42; }
 .workspace-rail { min-height:0; padding:24px 16px 14px; border-right:1px solid rgba(159,255,216,.11); background:#090d0c; display:flex; flex-direction:column; gap:15px; position:relative; z-index:3; }
-.live-brand { display:flex; align-items:center; gap:8px; padding:0 6px 3px; font:700 12px Syne; letter-spacing:.13em; }.live-brand b { color:var(--signal); font:500 9px 'DM Mono'; margin-left:auto; }.brand-mark { width:18px; height:18px; border:1px solid var(--signal); border-radius:50%; display:grid; place-items:center; }.brand-mark i { width:6px; height:6px; border-radius:50%; background:var(--signal); box-shadow:0 0 12px var(--signal); }
+.live-brand { width:100%; border:0; background:transparent; color:inherit; display:flex; align-items:center; gap:8px; padding:0 6px 3px; font:700 12px Syne; letter-spacing:.13em; }.live-brand:focus-visible { outline:1px solid var(--signal); outline-offset:4px; }.live-brand b { color:var(--signal); font:500 9px 'DM Mono'; margin-left:auto; }.brand-mark { width:18px; height:18px; border:1px solid var(--signal); border-radius:50%; display:grid; place-items:center; }.brand-mark i { width:6px; height:6px; border-radius:50%; background:var(--signal); box-shadow:0 0 12px var(--signal); }
 .rail-label { display:flex; align-items:center; justify-content:space-between; color:#53605a; font:8px 'DM Mono'; letter-spacing:.12em; text-transform:uppercase; padding:3px 3px 0; }.rail-label button { border:0; background:transparent; color:#71817a; font-size:8px; }.rail-label button:hover { color:var(--signal); }
 .role-switcher-wrap { position:relative; }.role-switcher { width:100%; display:grid; grid-template-columns:42px 1fr auto; gap:11px; align-items:center; padding:10px; text-align:left; color:var(--mist); border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.035); }.mini-avatar,.user-avatar { width:42px; height:42px; border-radius:50%; overflow:hidden; display:grid; place-items:center; background:#163227; color:var(--signal); font:600 11px Syne; }.mini-avatar img,.user-avatar img { width:100%; height:100%; object-fit:cover; }.mini-avatar i,.user-avatar i { font-style:normal; }.role-switcher > span:nth-child(2) { min-width:0; }.role-switcher strong,.role-switcher small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.role-switcher strong { font:600 13px Syne; }.role-switcher small { color:#69756f; font:8px 'DM Mono'; margin-top:5px; }.role-switcher > b { color:#52605a; }
 .role-menu { position:absolute; z-index:10; inset:calc(100% + 7px) 0 auto; padding:5px; border:1px solid rgba(159,255,216,.18); background:#101614; box-shadow:0 24px 50px rgba(0,0,0,.5); }.role-menu button { width:100%; min-height:40px; border:0; display:grid; grid-template-columns:29px 1fr auto; align-items:center; gap:9px; text-align:left; color:#93a19a; background:transparent; }.role-menu button:hover,.role-menu button.active { background:rgba(159,255,216,.07); color:var(--mist); }.role-menu button > span { width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:#17241f;color:var(--signal);font:8px Syne; }.role-menu strong { font-size:10px; }.role-menu i { color:var(--signal); font-size:6px; }.role-menu .new-role { border-top:1px solid rgba(255,255,255,.07); margin-top:4px; padding-top:4px; }

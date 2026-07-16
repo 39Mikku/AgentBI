@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import { authenticatedDestination } from '@/home/home-auth-route'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const emailRe = /^[\w.+-]+@[\w-]+\.[\w.-]+$/
@@ -27,14 +29,14 @@ function onEnter() {
 
 onMounted(() => {
   if (auth.isAuthenticated) {
-    router.replace('/chat')
+    router.replace(authenticatedDestination(route.query.redirect))
   }
 })
 
 watch(
   () => auth.isAuthenticated,
   (authenticated) => {
-    if (authenticated) router.replace('/chat')
+    if (authenticated) router.replace(authenticatedDestination(route.query.redirect))
   },
 )
 </script>

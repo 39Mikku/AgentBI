@@ -9,7 +9,7 @@ const router = useRouter()
   <main class="toolbox-home">
     <div class="grain" aria-hidden="true"></div>
     <header class="toolbox-nav">
-      <button class="wordmark" @click="router.push('/chat')"><i></i>AGENTBI <span>/ TOOLBOX</span></button>
+      <button class="wordmark" @click="router.push('/home')"><i></i>AGENTBI <span>/ TOOLBOX</span></button>
       <nav aria-label="工作模式">
         <button @click="router.push('/chat')">Studio</button>
         <button @click="router.push('/live')">Live</button>

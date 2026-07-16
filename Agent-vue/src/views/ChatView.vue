@@ -292,7 +292,7 @@ onMounted(async () => {
 <template>
   <div class="workbench" :class="{ 'sidebar-open': menuOpen }">
     <aside class="rail">
-      <div class="rail-brand"><span class="brand-orbit"></span><span>OBSIDIAN</span><i>AI</i></div>
+      <button class="rail-brand" type="button" title="返回主页" @click="router.push('/home')"><span class="brand-orbit"></span><span>OBSIDIAN</span><i>AI</i></button>
       <AppModeSwitcher active="studio" class="rail-mode-switcher" />
       <button class="new-session" @click="newChat"><span>＋</span> 新建对话 <kbd>⌘ K</kbd></button>
       <div class="assistant-switch">
@@ -725,6 +725,12 @@ onMounted(async () => {
   flex-direction: column;
 }
 .rail-brand {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   letter-spacing: 0.13em;
   font-size: 13px;
   font-weight: 800;
@@ -733,6 +739,7 @@ onMounted(async () => {
   gap: 9px;
   padding: 0 10px 30px;
 }
+.rail-brand:focus-visible { outline: 1px solid var(--acid); outline-offset: -4px; }
 .rail-brand i {
   font-style: normal;
   color: var(--acid);
