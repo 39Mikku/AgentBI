@@ -23,6 +23,7 @@ from AgentBI.src.api.toolbox_system import router as toolbox_system_router
 from AgentBI.src.api.toolbox_file_time import router as toolbox_file_time_router
 from AgentBI.src.api.toolbox_auto_input import router as toolbox_auto_input_router
 from AgentBI.src.api.toolbox_moegirl import router as toolbox_moegirl_router
+from AgentBI.src.api.toolbox_emoji import router as toolbox_emoji_router
 from AgentBI.src.api.tests import router as tests_router
 from AgentBI.src.api.image_generation import router as image_generation_router
 from AgentBI.src.api.studio_assets import router as studio_asset_router
@@ -137,6 +138,7 @@ app.include_router(toolbox_system_router)
 app.include_router(toolbox_file_time_router)
 app.include_router(toolbox_auto_input_router)
 app.include_router(toolbox_moegirl_router)
+app.include_router(toolbox_emoji_router)
 app.include_router(tests_router)
 app.include_router(image_generation_router)
 app.include_router(studio_asset_router)

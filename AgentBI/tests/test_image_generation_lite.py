@@ -103,6 +103,26 @@ class LiteImageAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.media_type, "image/png")
         self.assertEqual(result.model, "gemini-image")
 
+    async def test_reference_image_uses_openai_compatible_multimodal_content(self):
+        from AgentBI.src.services.image_generation.lite_adapter import LiteChatImageAdapter
+
+        client = _FakeClient(
+            {"choices": [{"message": {"images": [{"image_url": {"url": PNG_DATA_URL}}]}}]}
+        )
+        adapter = LiteChatImageAdapter(client_factory=lambda provider: client)
+
+        await adapter.generate(
+            provider={"api_key": "secret", "base_url": "https://newapi.example/v1"},
+            model="gemini-image",
+            prompt="保留参考角色，生成表情贴纸",
+            aspect_ratio="square",
+            reference_image_data_url=PNG_DATA_URL,
+        )
+
+        content = client.chat.completions.request["messages"][0]["content"]
+        self.assertEqual(content[0], {"type": "image_url", "image_url": {"url": PNG_DATA_URL}})
+        self.assertEqual(content[1], {"type": "text", "text": "保留参考角色，生成表情贴纸"})
+
 
 if __name__ == "__main__":
     unittest.main()

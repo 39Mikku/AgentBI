@@ -21,6 +21,7 @@ export interface GenerateImagePayload {
   aspect_ratio: ImageAspectRatio
   provider_id?: string
   scope_id?: string
+  reference_image_data_url?: string
 }
 
 export interface CodexImageOAuthStatus {
@@ -36,4 +37,3 @@ export interface CodexImageOAuthStart {
   user_code: string
   expires_in: number
 }
-

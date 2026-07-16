@@ -35,6 +35,11 @@ class _OAuthStore:
         return "pro-token"
 
 
+class _AssetService:
+    def register_generated(self, user_id, image, metadata=None):
+        self.request = {"user_id": user_id, "image": image, "metadata": metadata}
+
+
 class ImageGenerationServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_lite_uses_current_provider_and_preserves_direct_prompt_verbatim(self):
         from AgentBI.src.services.image_generation.artifact_store import ImageArtifactStore
@@ -65,6 +70,37 @@ class ImageGenerationServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(lite.request["model"], "gemini-image")
             self.assertEqual(image.mode, "lite")
             self.assertTrue((Path(directory) / image.relative_path).exists())
+
+    async def test_reference_and_scope_metadata_are_forwarded(self):
+        from AgentBI.src.services.image_generation.artifact_store import ImageArtifactStore
+        from AgentBI.src.services.image_generation.service import ImageGenerationService
+
+        with tempfile.TemporaryDirectory() as directory:
+            lite = _LiteAdapter()
+            assets = _AssetService()
+            service = ImageGenerationService(
+                repository=_Repository(
+                    {"mode": "lite", "lite_model": "gemini-image", "pro_quality": "high"}
+                ),
+                artifact_store=ImageArtifactStore(Path(directory)),
+                lite_adapter=lite,
+                pro_adapter=_ProAdapter(),
+                oauth_store=_OAuthStore(),
+                asset_service=assets,
+            )
+            reference = "data:image/png;base64,reference"
+
+            await service.generate(
+                user_id="user-1",
+                scope_id="toolbox-emoji",
+                prompt="生成贴纸",
+                aspect_ratio="square",
+                provider={"api_key": "key"},
+                reference_image_data_url=reference,
+            )
+
+            self.assertEqual(lite.request["reference_image_data_url"], reference)
+            self.assertEqual(assets.request["metadata"], {"scope_id": "toolbox-emoji"})
 
     async def test_lite_requires_a_provider_but_pro_uses_independent_oauth(self):
         from AgentBI.src.services.image_generation.artifact_store import ImageArtifactStore

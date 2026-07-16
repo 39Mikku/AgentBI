@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import json
 import tempfile
 import time
@@ -7,6 +8,7 @@ from pathlib import Path
 
 
 PNG = b"\x89PNG\r\n\x1a\npro-image"
+PNG_DATA_URL = "data:image/png;base64," + base64.b64encode(PNG).decode("ascii")
 
 
 def jwt_with_account(account_id: str) -> str:
@@ -140,6 +142,21 @@ class CodexImageProtocolTests(unittest.TestCase):
         self.assertEqual(payload["tools"][0]["quality"], "high")
         self.assertEqual(payload["tool_choice"]["mode"], "required")
 
+    def test_reference_image_is_added_as_responses_input_image(self):
+        from AgentBI.src.services.image_generation.codex_adapter import build_codex_payload
+
+        payload = build_codex_payload(
+            prompt="保留参考角色，生成表情贴纸",
+            aspect_ratio="square",
+            quality="high",
+            reference_image_data_url=PNG_DATA_URL,
+        )
+
+        content = payload["input"][0]["content"]
+        self.assertEqual(content[0], {"type": "input_image", "image_url": PNG_DATA_URL})
+        self.assertEqual(content[1], {"type": "input_text", "text": "保留参考角色，生成表情贴纸"})
+        self.assertNotIn("input_fidelity", payload["tools"][0])
+
     def test_codex_headers_include_account_without_exposing_token(self):
         from AgentBI.src.services.image_generation.codex_adapter import codex_headers
 
@@ -197,6 +214,28 @@ class _StreamingClient:
         return _StreamingResponse()
 
 
+class _HangingPartialResponse:
+    status_code = 200
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return False
+
+    async def aiter_lines(self):
+        partial = base64.b64encode(PNG).decode("ascii")
+        yield "event: response.image_generation_call.partial_image"
+        yield f'data: {{"partial_image_b64":"{partial}"}}'
+        yield ""
+        await asyncio.sleep(1)
+
+
+class _HangingPartialClient:
+    def stream(self, *args, **kwargs):
+        return _HangingPartialResponse()
+
+
 class CodexImageStreamingTests(unittest.IsolatedAsyncioTestCase):
     async def test_returns_as_soon_as_final_image_event_arrives(self):
         from AgentBI.src.services.image_generation.codex_adapter import CodexImageAdapter
@@ -207,6 +246,21 @@ class CodexImageStreamingTests(unittest.IsolatedAsyncioTestCase):
             aspect_ratio="square",
             quality="medium",
             client=_StreamingClient(),
+        )
+
+        self.assertEqual(image.image_bytes, PNG)
+        self.assertEqual(image.model, "gpt-image-2")
+
+    async def test_total_deadline_returns_the_latest_partial_instead_of_waiting_forever(self):
+        from AgentBI.src.services.image_generation.codex_adapter import CodexImageAdapter
+
+        image = await CodexImageAdapter().generate(
+            access_token=jwt_with_account("account-2"),
+            prompt="a sticker sheet",
+            aspect_ratio="square",
+            quality="medium",
+            client=_HangingPartialClient(),
+            total_timeout_seconds=0.01,
         )
 
         self.assertEqual(image.image_bytes, PNG)

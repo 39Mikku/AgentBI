@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from collections.abc import Iterable
@@ -19,7 +20,16 @@ _SIZES = {
 }
 
 
-def build_codex_payload(*, prompt: str, aspect_ratio: str, quality: str) -> dict[str, Any]:
+def build_codex_payload(
+    *,
+    prompt: str,
+    aspect_ratio: str,
+    quality: str,
+    reference_image_data_url: str | None = None,
+) -> dict[str, Any]:
+    content: list[dict[str, Any]] = [{"type": "input_text", "text": prompt}]
+    if reference_image_data_url:
+        content.insert(0, {"type": "input_image", "image_url": reference_image_data_url})
     return {
         "model": "gpt-5.5",
         "store": False,
@@ -31,7 +41,7 @@ def build_codex_payload(*, prompt: str, aspect_ratio: str, quality: str) -> dict
             {
                 "type": "message",
                 "role": "user",
-                "content": [{"type": "input_text", "text": prompt}],
+                "content": content,
             }
         ],
         "tools": [
@@ -151,7 +161,9 @@ class CodexImageAdapter:
         prompt: str,
         aspect_ratio: str,
         quality: str,
+        reference_image_data_url: str | None = None,
         client: httpx.AsyncClient | None = None,
+        total_timeout_seconds: float = 180,
     ) -> ImageBinary:
         owns_client = client is None
         http = client or httpx.AsyncClient(
@@ -159,44 +171,50 @@ class CodexImageAdapter:
         )
         latest: str | None = None
         try:
-            async with http.stream(
-                "POST",
-                CODEX_RESPONSES_URL,
-                headers=codex_headers(access_token),
-                json=build_codex_payload(
-                    prompt=prompt,
-                    aspect_ratio=aspect_ratio,
-                    quality=quality,
-                ),
-            ) as response:
-                if response.status_code >= 400:
-                    body = (await response.aread()).decode("utf-8", errors="replace")[:500]
-                    if "Tool choice 'image_generation' not found" in body:
-                        raise ImageGenerationError("当前 Codex 账户暂不支持 gpt-image-2 生图工具")
-                    raise ImageGenerationError(f"Codex 生图请求失败（HTTP {response.status_code}）")
-                pending_lines: list[str] = []
-                final_received = False
-                async for line in response.aiter_lines():
-                    pending_lines.append(line)
-                    if line.strip():
-                        continue
-                    for event in parse_sse_lines(pending_lines):
-                        candidate = extract_image_b64(event)
-                        if candidate:
-                            latest = candidate
-                        final = extract_final_image_b64(event)
-                        if final:
-                            latest = final
-                            final_received = True
-                            break
-                    pending_lines = []
-                    if final_received:
-                        break
-                if pending_lines and not final_received:
-                    for event in parse_sse_lines(pending_lines):
-                        candidate = extract_image_b64(event)
-                        if candidate:
-                            latest = candidate
+            try:
+                async with asyncio.timeout(total_timeout_seconds):
+                    async with http.stream(
+                        "POST",
+                        CODEX_RESPONSES_URL,
+                        headers=codex_headers(access_token),
+                        json=build_codex_payload(
+                            prompt=prompt,
+                            aspect_ratio=aspect_ratio,
+                            quality=quality,
+                            reference_image_data_url=reference_image_data_url,
+                        ),
+                    ) as response:
+                        if response.status_code >= 400:
+                            body = (await response.aread()).decode("utf-8", errors="replace")[:500]
+                            if "Tool choice 'image_generation' not found" in body:
+                                raise ImageGenerationError("当前 Codex 账户暂不支持 gpt-image-2 生图工具")
+                            raise ImageGenerationError(f"Codex 生图请求失败（HTTP {response.status_code}）")
+                        pending_lines: list[str] = []
+                        final_received = False
+                        async for line in response.aiter_lines():
+                            pending_lines.append(line)
+                            if line.strip():
+                                continue
+                            for event in parse_sse_lines(pending_lines):
+                                candidate = extract_image_b64(event)
+                                if candidate:
+                                    latest = candidate
+                                final = extract_final_image_b64(event)
+                                if final:
+                                    latest = final
+                                    final_received = True
+                                    break
+                            pending_lines = []
+                            if final_received:
+                                break
+                        if pending_lines and not final_received:
+                            for event in parse_sse_lines(pending_lines):
+                                candidate = extract_image_b64(event)
+                                if candidate:
+                                    latest = candidate
+            except TimeoutError as error:
+                if not latest:
+                    raise ImageGenerationError("Codex 生图等待超过 3 分钟，请重试") from error
         finally:
             if owns_client:
                 await http.aclose()

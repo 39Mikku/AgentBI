@@ -1,4 +1,5 @@
 import unittest
+import base64
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -92,6 +93,29 @@ class ImageGenerationApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_reference_image_is_forwarded_without_rewriting(self):
+        reference = "data:image/png;base64," + base64.b64encode(
+            b"\x89PNG\r\n\x1a\nreference"
+        ).decode("ascii")
+
+        response = self.client.post(
+            "/image-generation/generate",
+            json={
+                "user_id": "elysia@example.com",
+                "prompt": "生成一组贴纸",
+                "aspect_ratio": "square",
+                "provider_id": "provider-1",
+                "scope_id": "toolbox-emoji",
+                "reference_image_data_url": reference,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.app.state.image_generation_service.request["reference_image_data_url"],
+            reference,
+        )
 
     def test_oauth_routes_return_status_and_device_code_without_tokens(self):
         status = self.client.get("/image-generation/codex/status").json()

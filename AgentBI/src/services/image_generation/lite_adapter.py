@@ -90,13 +90,20 @@ class LiteChatImageAdapter:
         model: str,
         prompt: str,
         aspect_ratio: str,
+        reference_image_data_url: str | None = None,
     ) -> ImageBinary:
         if not model.strip():
             raise ImageGenerationError("请先在能力配置中填写 Lite 生图模型")
         client = self.client_factory(provider)
+        content: str | list[dict[str, Any]] = prompt
+        if reference_image_data_url:
+            content = [
+                {"type": "image_url", "image_url": {"url": reference_image_data_url}},
+                {"type": "text", "text": prompt},
+            ]
         response = await client.chat.completions.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": content}],
             extra_body={
                 "modalities": ["text", "image"],
                 "image_config": {"aspect_ratio": _ASPECT_RATIOS.get(aspect_ratio, "1:1")},
@@ -104,4 +111,3 @@ class LiteChatImageAdapter:
         )
         image_bytes, media_type = extract_image_data(response)
         return ImageBinary(image_bytes=image_bytes, media_type=media_type, model=model)
-

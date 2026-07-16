@@ -83,6 +83,12 @@ const router = createRouter({
       meta: { title: 'Moe Archive · AgentBI', requiresAuth: true },
     },
     {
+      path: '/toolbox/emoji',
+      name: 'emoji-sticker-workbench',
+      component: () => import('@/views/EmojiStickerView.vue'),
+      meta: { title: 'Emoji Press · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/settings/models',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),

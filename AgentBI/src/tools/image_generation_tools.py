@@ -21,6 +21,7 @@ async def generate_image(
     prompt: str,
     aspect_ratio: str,
     provider: dict[str, Any] | None,
+    reference_image_data_url: str | None = None,
 ) -> AtomicToolResult:
     image = await service.generate(
         user_id=user_id,
@@ -28,6 +29,7 @@ async def generate_image(
         prompt=prompt,
         aspect_ratio=aspect_ratio,
         provider=provider,
+        reference_image_data_url=reference_image_data_url,
     )
     compact = {
         "status": "generated",

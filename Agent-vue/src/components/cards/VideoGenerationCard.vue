@@ -19,7 +19,7 @@ const auth = useAuthStore()
 const userId = computed(() => auth.email || 'local-user')
 const job = ref<VideoGenerationJob | null>(null)
 const requestError = ref('')
-let timer: ReturnType<typeof setTimeout> | null = null
+let timer: number | null = null
 
 const status = computed<VideoGenerationStatus>(() => job.value?.status || props.status || 'queued')
 const progress = computed(() => normalizeVideoProgress(job.value?.progress ?? props.progress))

@@ -365,6 +365,40 @@ class ChatAgentImageGenerationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.request["scope_id"], "conversation-1")
         self.assertEqual(result.card["kind"], "image.generated")
 
+    async def test_direct_image_tool_forwards_the_current_user_reference_image(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+        from AgentBI.src.schemas.image_generation_schema import GeneratedImage
+
+        class ImageService:
+            async def generate(self, **kwargs):
+                self.request = kwargs
+                return GeneratedImage(
+                    id="image-1",
+                    url="/api/generated-images/hash/chat/image-1.png",
+                    relative_path="hash/chat/image-1.png",
+                    media_type="image/png",
+                    mode="pro",
+                    model="gpt-image-2",
+                    aspect_ratio="square",
+                    prompt=kwargs["prompt"],
+                )
+
+        service = ImageService()
+        reference = "data:image/png;base64,cmVmZXJlbmNl"
+        await ChatAgent(
+            capability_ids=["tool.image_generation"],
+            user_id="user@example.com",
+            conversation_id="conversation-1",
+            image_generation_service=service,
+            reference_image_data_url=reference,
+        )._invoke_direct_tool(
+            "generate_image",
+            '{"prompt":"preserve this character","aspect_ratio":"square"}',
+            {},
+        )
+
+        self.assertEqual(service.request["reference_image_data_url"], reference)
+
     async def test_direct_image_tool_rejects_missing_prompt_before_upstream_call(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
 

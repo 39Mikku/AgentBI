@@ -190,8 +190,8 @@ DIRECT_TOOLS = (
                     "description": "Optional output aspect ratio when the user or composition makes it clear.",
                 },
                 "duration_seconds": {
-                    "type": "integer",
-                    "enum": [3, 5, 10, 18],
+                    "type": "string",
+                    "enum": ["3", "5", "10", "18"],
                     "description": "Optional duration preset in seconds; choose the nearest preset requested by the user.",
                 },
             },

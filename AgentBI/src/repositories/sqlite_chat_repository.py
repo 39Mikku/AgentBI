@@ -516,9 +516,9 @@ class SqliteChatRepository:
                 f"""SELECT a.*, t.id AS source_conversation_id,
                     t.title AS source_conversation_title, m.id AS source_message_id
                 FROM studio_assets a
-                JOIN chat_message_assets ma ON ma.asset_id = a.id
-                JOIN chat_messages m ON m.id = ma.message_id
-                JOIN chat_threads t ON t.id = m.thread_id
+                LEFT JOIN chat_message_assets ma ON ma.asset_id = a.id
+                LEFT JOIN chat_messages m ON m.id = ma.message_id
+                LEFT JOIN chat_threads t ON t.id = m.thread_id
                 WHERE {' AND '.join(clauses)}
                 GROUP BY a.id ORDER BY a.created_at DESC""",
                 tuple(values),

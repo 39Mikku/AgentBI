@@ -80,6 +80,42 @@ class ModelTaskService:
             model=model,
         )
 
+    async def complete_vision(
+        self,
+        user_id: str,
+        system: str,
+        prompt: str,
+        images: list[dict[str, str]],
+    ) -> ModelTaskResult:
+        resolved = self.resolve(user_id, "vision")
+        if not resolved:
+            raise ModelTaskConfigurationError("请先在模型工作室配置识图模型")
+        route, provider = resolved
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        content.extend(
+            {
+                "type": "image_url",
+                "image_url": {"url": image["data_url"]},
+            }
+            for image in images
+        )
+        response = await self._client(provider).chat.completions.create(
+            model=route["model"],
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": content},
+            ],
+            temperature=1.0,
+        )
+        text = response.choices[0].message.content.strip() if response.choices else ""
+        if not text:
+            raise ModelTaskEmptyResponseError("识图模型未返回可用内容")
+        return ModelTaskResult(
+            text=text,
+            provider_name=provider.get("name") or "未命名提供商",
+            model=route["model"],
+        )
+
     async def embed(self, user_id: str, texts: list[str]) -> tuple[str, list[list[float]]] | None:
         resolved = self.resolve(user_id, "embedding")
         if not resolved or not texts:

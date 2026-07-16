@@ -46,6 +46,7 @@ class ImageGenerationService:
         prompt: str,
         aspect_ratio: str,
         provider: dict[str, Any] | None = None,
+        reference_image_data_url: str | None = None,
     ) -> GeneratedImage:
         stored = self.repository.get_capability_config(user_id, "tool.image_generation")
         config = resolve_capability_config("tool.image_generation", stored)
@@ -57,6 +58,7 @@ class ImageGenerationService:
                 model=config["lite_model"],
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
+                reference_image_data_url=reference_image_data_url,
             )
         else:
             access_token = await self.oauth_store.valid_access_token()
@@ -65,6 +67,7 @@ class ImageGenerationService:
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 quality=config["pro_quality"],
+                reference_image_data_url=reference_image_data_url,
             )
         width, height = _DIMENSIONS.get(aspect_ratio, _DIMENSIONS["square"])
         image = self.artifact_store.save(
@@ -82,5 +85,9 @@ class ImageGenerationService:
             },
         )
         if self.asset_service:
-            self.asset_service.register_generated(user_id, image)
+            self.asset_service.register_generated(
+                user_id,
+                image,
+                metadata={"scope_id": scope_id} if scope_id else None,
+            )
         return image

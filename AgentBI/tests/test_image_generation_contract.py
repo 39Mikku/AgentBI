@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import base64
 from pathlib import Path
 
 
@@ -30,6 +31,24 @@ class ImageGenerationContractTests(unittest.TestCase):
                 prompt="a luminous mechanical flower",
                 aspect_ratio="cinema",
             )
+
+    def test_reference_image_accepts_supported_data_urls_and_rejects_invalid_data(self):
+        from pydantic import ValidationError
+
+        from AgentBI.src.schemas.image_generation_schema import ImageGenerationRequest
+
+        png = b"\x89PNG\r\n\x1a\nreference"
+        data_url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+        request = ImageGenerationRequest(user_id="u", prompt="p", reference_image_data_url=data_url)
+        self.assertEqual(request.reference_image_data_url, data_url)
+
+        for invalid in (
+            "data:image/gif;base64,R0lGODlh",
+            "data:image/png;base64,not-base64!",
+            "https://example.com/reference.png",
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValidationError):
+                ImageGenerationRequest(user_id="u", prompt="p", reference_image_data_url=invalid)
 
     def test_direct_image_tool_exposes_prompt_and_aspect_ratio_only(self):
         from AgentBI.src.agents.chat_agent import ChatAgent

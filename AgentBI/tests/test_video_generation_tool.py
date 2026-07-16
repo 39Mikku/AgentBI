@@ -51,6 +51,15 @@ class VideoGenerationToolTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(parameters["required"], ["prompt"])
 
+    async def test_duration_presets_use_string_enum_for_openai_compatible_schemas(self):
+        from AgentBI.src.agents.chat_agent import ChatAgent
+
+        tools = ChatAgent.tool_definitions(["tool.video_generation"])
+        duration = tools[0]["function"]["parameters"]["properties"]["duration_seconds"]
+
+        self.assertEqual(duration["type"], "string")
+        self.assertEqual(duration["enum"], ["3", "5", "10", "18"])
+
     async def test_chat_agent_invokes_video_service_with_current_message(self):
         from AgentBI.src.agents.chat_agent import ChatAgent
 

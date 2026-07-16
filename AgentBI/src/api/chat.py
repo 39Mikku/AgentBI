@@ -144,6 +144,13 @@ def stream_assistant(
             build_message_start_payload(conversation_id, assistant_message, conversation_title),
         )
         try:
+            reference_image_data_url = (
+                asset_service.message_reference_image_data_url(
+                    str(assistant_message["parent_id"]), assistant_message["user_id"]
+                )
+                if asset_service
+                else None
+            )
             async for event in ChatAgent(
                 assistant.get("system_prompt"),
                 assistant.get("capability_ids", []),
@@ -160,6 +167,7 @@ def stream_assistant(
                 image_generation_service=image_generation_service,
                 video_generation_service=video_generation_service,
                 assistant_message_id=str(assistant_message["_id"]),
+                reference_image_data_url=reference_image_data_url,
             ).stream(context, provider, model, temperature, thinking_level, runtime_context):
                 event_type = event["type"]
                 if event_type == "delta":

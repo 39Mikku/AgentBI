@@ -31,6 +31,7 @@ describe('image generation API', () => {
       aspect_ratio: 'square',
       provider_id: 'provider-1',
       scope_id: 'assistant-avatar',
+      reference_image_data_url: 'data:image/png;base64,cmVmZXJlbmNl',
     })
 
     const call = fetch.mock.calls[0]
@@ -42,6 +43,7 @@ describe('image generation API', () => {
       aspect_ratio: 'square',
       provider_id: 'provider-1',
       scope_id: 'assistant-avatar',
+      reference_image_data_url: 'data:image/png;base64,cmVmZXJlbmNl',
     })
   })
 

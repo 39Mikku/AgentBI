@@ -45,6 +45,7 @@ async def generate_image(request: Request, payload: ImageGenerationRequest):
             prompt=payload.prompt,
             aspect_ratio=payload.aspect_ratio,
             provider=provider,
+            reference_image_data_url=payload.reference_image_data_url,
         )
     except (ImageGenerationError, CodexOAuthError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -67,4 +68,3 @@ async def connect_codex(request: Request):
 def disconnect_codex(request: Request):
     _oauth(request).disconnect()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-

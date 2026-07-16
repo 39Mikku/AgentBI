@@ -63,6 +63,16 @@ async function remove(asset: StudioAsset) {
 function openSource(asset: StudioAsset) {
   if (asset.source_conversation_id)
     void router.push({ path: '/chat', query: { conversation: asset.source_conversation_id } })
+  else if (asset.metadata?.scope_id === 'toolbox-emoji') void router.push('/toolbox/emoji')
+}
+
+function sourceLabel(asset: StudioAsset) {
+  if (asset.metadata?.scope_id === 'toolbox-emoji') return 'TOOLBOX · EMOJI PRESS'
+  return asset.source === 'generated' ? 'GENERATED' : 'UPLOADED'
+}
+
+function canOpenSource(asset: StudioAsset) {
+  return Boolean(asset.source_conversation_id || asset.metadata?.scope_id === 'toolbox-emoji')
 }
 
 onMounted(load)
@@ -101,12 +111,12 @@ onMounted(load)
         <a v-else class="doc-preview" :href="assetContentUrl(asset.id, userId)" download><b>DOCX</b><span>↓</span></a>
         <div class="asset-index">{{ String(index + 1).padStart(2, '0') }}</div>
         <div class="asset-copy">
-          <small>{{ asset.source === 'generated' ? 'GENERATED' : 'UPLOADED' }} · {{ formatAssetSize(asset.size) }}</small>
+          <small>{{ sourceLabel(asset) }} · {{ formatAssetSize(asset.size) }}</small>
           <strong>{{ asset.filename }}</strong>
           <p>{{ String(asset.metadata?.prompt || asset.source_conversation_title || '未命名来源') }}</p>
         </div>
         <div class="asset-actions">
-          <button :disabled="!asset.source_conversation_id" @click="openSource(asset)">来源会话</button>
+          <button :disabled="!canOpenSource(asset)" @click="openSource(asset)">{{ asset.metadata?.scope_id === 'toolbox-emoji' ? '打开贴纸工坊' : '来源会话' }}</button>
           <button class="danger" :disabled="deleting === asset.id" @click="remove(asset)">{{ deleting === asset.id ? '删除中' : '删除' }}</button>
         </div>
       </article>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 from io import BytesIO
 from pathlib import Path
@@ -142,6 +143,21 @@ class StudioAssetService:
             raise FileNotFoundError("附件路径无效")
         return path.read_bytes()
 
+    def message_reference_image_data_url(self, message_id: str, user_id: str) -> str | None:
+        assets = self.repository.list_message_assets(message_id, user_id)
+        image = next(
+            (
+                item
+                for item in assets
+                if item.get("kind") == "image" and not item.get("deleted_at")
+            ),
+            None,
+        )
+        if not image:
+            return None
+        encoded = base64.b64encode(self.content_for(image)).decode("ascii")
+        return f"data:{image['mime_type']};base64,{encoded}"
+
     def delete_asset(self, asset_id: str, user_id: str) -> dict[str, Any]:
         asset = self.repository.get_asset(asset_id, user_id)
         if not asset:
@@ -152,8 +168,22 @@ class StudioAssetService:
             (root / storage_path).unlink(missing_ok=True)
         return self.repository.tombstone_asset(asset_id, user_id)
 
-    def register_generated(self, user_id: str, image: Any) -> dict[str, Any]:
+    def register_generated(
+        self,
+        user_id: str,
+        image: Any,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         path = self.generated_root / image.relative_path
+        asset_metadata = {
+            "mode": image.mode,
+            "model": image.model,
+            "aspect_ratio": image.aspect_ratio,
+            "width": image.width,
+            "height": image.height,
+            "prompt": image.prompt,
+        }
+        asset_metadata.update(metadata or {})
         return self.repository.create_asset(
             {
                 "id": image.id,
@@ -164,14 +194,7 @@ class StudioAssetService:
                 "mime_type": image.media_type,
                 "size": path.stat().st_size,
                 "storage_path": image.relative_path,
-                "metadata": {
-                    "mode": image.mode,
-                    "model": image.model,
-                    "aspect_ratio": image.aspect_ratio,
-                    "width": image.width,
-                    "height": image.height,
-                    "prompt": image.prompt,
-                },
+                "metadata": asset_metadata,
             }
         )
 

@@ -1,5 +1,6 @@
 import os
 import unittest
+import base64
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -155,6 +156,30 @@ class ModelTaskServiceTests(unittest.IsolatedAsyncioTestCase):
                 await ModelTaskService(_Repository()).complete_with_chat_preferences(
                     "alice", "system", "prompt"
                 )
+
+    async def test_vision_completion_uses_the_configured_vision_route_and_images(self):
+        from AgentBI.src.services.model_task_service import ModelTaskService
+
+        image_url = "data:image/png;base64," + base64.b64encode(
+            b"\x89PNG\r\n\x1a\nemoji"
+        ).decode("ascii")
+        completions = _Completions()
+        client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+        with patch.object(ModelTaskService, "_client", return_value=client):
+            result = await ModelTaskService(_Repository()).complete_vision(
+                "alice",
+                "你是表情命名助手。",
+                "请命名图片。",
+                [{"id": "s1", "data_url": image_url}],
+            )
+
+        self.assertEqual(result.text, "result")
+        self.assertEqual(result.model, "task-model")
+        self.assertEqual(completions.request["model"], "task-model")
+        self.assertEqual(completions.request["temperature"], 1.0)
+        content = completions.request["messages"][1]["content"]
+        self.assertEqual(content[0], {"type": "text", "text": "请命名图片。"})
+        self.assertEqual(content[1], {"type": "image_url", "image_url": {"url": image_url}})
 
 
 if __name__ == "__main__":
