@@ -2,6 +2,8 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import ProjectFooter from '@/components/brand/ProjectFooter.vue'
+
 const router = useRouter()
 const phrases: readonly [string, string, string] = [
   '把执行交给智能体。',
@@ -196,10 +198,7 @@ onBeforeUnmount(() => clearTimeout(typeTimer))
       </ol>
     </section>
 
-    <footer class="site-footer">
-      <span>AGENTBI / INTELLIGENCE WITH INTENTION</span>
-      <button type="button" @click="openLogin">进入工作台 <b>↗</b></button>
-    </footer>
+    <ProjectFooter class="site-footer" />
   </main>
 </template>
 
@@ -803,32 +802,8 @@ blockquote cite {
   line-height: 1.55;
 }
 .site-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   width: min(1240px, calc(100% - 64px));
   margin: 0 auto;
-  padding: 28px 0;
-  color: #777b74;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-}
-.site-footer button {
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font: 10px var(--font-mono);
-  cursor: pointer;
-}
-.site-footer b {
-  display: inline-grid;
-  width: 18px;
-  height: 18px;
-  margin-left: 7px;
-  place-items: center;
-  border: 1px solid #a8aba3;
-  border-radius: 50%;
-  font-weight: 400;
 }
 @keyframes rise {
   from {
@@ -947,14 +922,6 @@ blockquote cite {
   }
   .workflow li small {
     grid-column: 2;
-  }
-  .site-footer {
-    align-items: flex-start;
-    gap: 20px;
-  }
-  .site-footer span {
-    max-width: 200px;
-    line-height: 1.5;
   }
 }
 @media (prefers-reduced-motion: reduce) {

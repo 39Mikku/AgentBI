@@ -1,415 +1,297 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
+
+import BrandMark from '@/components/brand/BrandMark.vue'
+import ProjectFooter from '@/components/brand/ProjectFooter.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import { AUTHOR_PARAGRAPHS, PROJECT_AUTHOR, PROJECT_MODULES } from '@/project/project-surfaces'
+import { useAuthStore } from '@/stores/auth'
 
-const router = useRouter()
 const auth = useAuthStore()
-
-function handleLogout() {
-  auth.logout()
-  router.push('/')
-}
-
-interface Capability {
-  name: string
-  desc: string
-  tag: string
-  status: 'online' | 'ready'
-  glyph: string
-}
-
-const capabilities: Capability[] = [
-  {
-    name: '邮件智能投递',
-    desc: 'LangChain @tool 装配的邮件发送工具，由大模型自主决策收件人与内容。',
-    tag: 'send_email_tool',
-    status: 'online',
-    glyph: 'mail',
-  },
-  {
-    name: '数据库实时查询',
-    desc: 'MongoDB 查询工具，将自然语言意图转化为精确的字段级查询体。',
-    tag: 'mongo_query_tool',
-    status: 'online',
-    glyph: 'db',
-  },
-  {
-    name: '上下文持久记忆',
-    desc: 'MemorySaver 检查点挂载，跨轮次会话通过 thread_id 保持记忆连续性。',
-    tag: 'MemorySaver',
-    status: 'ready',
-    glyph: 'brain',
-  },
-  {
-    name: '强类型契约校验',
-    desc: 'Pydantic Schema 双向约束入参与出参，杜绝大模型字段漂移。',
-    tag: 'schemas/',
-    status: 'ready',
-    glyph: 'shield',
-  },
-]
-
-const glyphs: Record<string, string> = {
-  mail: 'M3 7l9 6 9-6M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z',
-  db: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zm0 0v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
-  brain: 'M9.5 4a2.5 2.5 0 0 0-2.5 2.5v.2A2.5 2.5 0 0 0 5 9.2c0 1 .6 1.9 1.5 2.3-.6.5-1 1.2-1 2 0 1.4 1.1 2.5 2.5 2.5h.5M14.5 4A2.5 2.5 0 0 1 17 6.5v.2a2.5 2.5 0 0 1 2 2.5c0 1-.6 1.9-1.5 2.3.6.5 1 1.2 1 2 0 1.4-1.1 2.5-2.5 2.5H16M9.5 4h5M9.5 16h5M12 4v12',
-  shield: 'M12 3l7 3v5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-3z',
-}
+const workspaceTarget = computed(() => auth.isAuthenticated ? '/home' : '/login')
+const workspaceLabel = computed(() => auth.isAuthenticated ? '返回工作空间' : '进入工作台')
 </script>
 
 <template>
-  <div class="console">
-    <header class="console-bar">
-      <div class="bar-brand">
-        <span class="bar-dot"></span>
-        <span class="bar-name">AgentBI</span>
-        <span class="bar-sep">/</span>
-        <span class="bar-crumb">控制台</span>
-      </div>
-      <div class="bar-actions">
+  <main class="about-page">
+    <header class="about-header">
+      <RouterLink class="about-brand" to="/" aria-label="返回 AgentBI 首页">
+        <BrandMark />
+        <strong>AgentBI</strong>
+      </RouterLink>
+      <nav aria-label="关于页导航">
+        <RouterLink to="/">首页</RouterLink>
+        <RouterLink :to="workspaceTarget">{{ workspaceLabel }}</RouterLink>
         <ThemeToggle />
-        <button class="btn-ghost" type="button" @click="handleLogout">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M15 17l5-5-5-5M20 12H9M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-          </svg>
-          <span>退出登录</span>
-        </button>
-      </div>
+      </nav>
     </header>
 
-    <main class="console-main">
-      <section class="welcome" style="animation: fade-up 0.6s ease both">
-        <p class="welcome-eyebrow">访问已授权</p>
-        <h1 class="welcome-title">
-          欢迎回来<span class="title-dot">.</span>
-        </h1>
-        <p class="welcome-sub">
-          身份核验通过，智能体中枢已就绪。当前会话由邮箱验证码通道建立，
-          <span class="mono">{{ auth.email || '已认证用户' }}</span> 拥有完整工具调用权限。
-        </p>
-      </section>
+    <section class="about-hero">
+      <div class="hero-index">
+        <span>ABOUT / 01</span>
+        <i></i>
+        <span>PERSONAL AI WORKBENCH</span>
+      </div>
+      <h1>
+        为自己做，<br />
+        <em>因好奇心</em><br />
+        继续生长。
+      </h1>
+      <div class="hero-note">
+        <p>AgentBI 不是一个试图装下所有人的产品。</p>
+        <p>它是一处把模型、角色、声音、工具和偶然冒出的想法收拢起来的私人工作空间。</p>
+        <span>LOCAL FIRST · MULTI MODEL · AGENT READY</span>
+      </div>
+    </section>
 
-      <section class="cap-grid">
-        <h2 class="grid-heading" style="animation: fade-up 0.6s ease 0.1s both">
-          <span class="heading-index">01</span>
-          智能体能力矩阵
-        </h2>
-        <div class="cards">
-          <article
-            v-for="(cap, i) in capabilities"
-            :key="cap.name"
-            class="cap-card"
-            :style="{ animationDelay: `${0.15 + i * 0.08}s` }"
-          >
-            <div class="cap-head">
-              <span class="cap-glyph">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path :d="glyphs[cap.glyph]" />
-                </svg>
-              </span>
-              <span class="cap-status" :class="cap.status">
-                <i class="status-dot"></i>
-                {{ cap.status === 'online' ? '运行中' : '就绪' }}
-              </span>
-            </div>
-            <h3 class="cap-name">{{ cap.name }}</h3>
-            <p class="cap-desc">{{ cap.desc }}</p>
-            <code class="cap-tag">{{ cap.tag }}</code>
-          </article>
-        </div>
-      </section>
+    <section class="origin-section">
+      <div class="section-label"><span>02</span><p>ORIGIN / 起点</p></div>
+      <blockquote>“这功能要是能<br />直接用就好了。”</blockquote>
+      <div class="origin-copy">
+        <p>于是一个功能接着一个功能，被放进同一个界面。</p>
+        <p>不是为了追逐完整，而是为了让真实使用中的每一次不顺手，都能变成下一次修改的理由。</p>
+      </div>
+    </section>
 
-      <section class="arch-note" style="animation: fade-up 0.6s ease 0.5s both">
-        <div class="note-glyph">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" />
-          </svg>
+    <section class="spaces-section">
+      <header class="section-heading">
+        <div class="section-label"><span>03</span><p>THE SPACES / 四个空间</p></div>
+        <p>同一套身份、配置与本地数据底座，各自承担不同的交互方式。</p>
+      </header>
+      <div class="space-grid">
+        <article v-for="module in PROJECT_MODULES" :key="module.name" :style="{ '--module-accent': module.accent }">
+          <div><span>{{ module.index }}</span><i></i><small>{{ module.name.toUpperCase() }}</small></div>
+          <h2>{{ module.name }}</h2>
+          <p>{{ module.description }}</p>
+          <small>{{ module.detail }}</small>
+          <RouterLink :to="auth.isAuthenticated ? module.to : '/login'">打开空间 <b>↗</b></RouterLink>
+        </article>
+      </div>
+    </section>
+
+    <section class="architecture-section">
+      <div class="section-label"><span>04</span><p>ARCHITECTURE / 当前结构</p></div>
+      <div class="architecture-flow" aria-label="AgentBI 技术架构">
+        <div class="flow-node primary"><small>INTERFACE</small><strong>Vue 3</strong><span>TypeScript / Vite</span></div>
+        <i>→</i>
+        <div class="flow-node"><small>APPLICATION</small><strong>FastAPI</strong><span>Agents / Tools / Streaming</span></div>
+        <i>→</i>
+        <div class="flow-stack">
+          <div class="flow-node"><small>LOCAL DATA</small><strong>SQLite</strong><span>Conversation / Memory / Assets</span></div>
+          <div class="flow-node accent"><small>MODEL LAYER</small><strong>Providers</strong><span>OpenAI-compatible / Realtime</span></div>
         </div>
-        <div class="note-body">
-          <p class="note-title">架构备忘</p>
-          <p class="note-text">
-            后端基于 FastAPI + LangChain 构建，以 OOP 封装的 <span class="mono">LoginAgent</span> 为大脑，
-            通过 <span class="mono">@tool</span> 装配本地工具集。验证码经 Redis 缓存（TTL 300s）双向绑定，
-            登录校验在服务端完成。
-          </p>
+      </div>
+      <p class="architecture-note">功能可以继续变多，但它们应当共享清晰的数据边界和同一个工作空间，而不是重新长成一组互不相识的页面。</p>
+    </section>
+
+    <section class="author-section">
+      <div class="author-aside">
+        <span>05 / ABOUT THE AUTHOR</span>
+        <BrandMark tone="inverse" label="" />
+        <small>BUILT FOR MYSELF<br />EXPANDED BY CURIOSITY</small>
+      </div>
+      <article>
+        <p class="author-kicker">关于作者</p>
+        <h2>{{ PROJECT_AUTHOR }}<i>。</i></h2>
+        <div class="author-copy">
+          <p v-for="(paragraph, index) in AUTHOR_PARAGRAPHS.slice(0, -1)" :key="index">{{ paragraph }}</p>
         </div>
-      </section>
-    </main>
-  </div>
+        <p class="author-signoff">{{ AUTHOR_PARAGRAPHS.at(-1) }}</p>
+      </article>
+    </section>
+
+    <ProjectFooter class="about-footer" />
+  </main>
 </template>
 
 <style scoped>
-.console {
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap');
+
+.about-page {
+  --about-ink: #11110f;
+  --about-paper: #f1efe8;
+  --about-muted: #77736b;
+  --about-line: #bbb6aa;
+  --about-acid: #ccff24;
   min-height: 100vh;
-  background: var(--background);
-  color: var(--foreground);
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgb(17 17 15 / 0.045) 1px, transparent 1px),
+    linear-gradient(rgb(17 17 15 / 0.035) 1px, transparent 1px),
+    var(--about-paper);
+  background-size: 48px 48px;
+  color: var(--about-ink);
+  font-family: 'Manrope', var(--font-sans), sans-serif;
 }
 
-/* ---- top bar ---- */
-.console-bar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
+:global(.dark) .about-page {
+  --about-ink: #efede6;
+  --about-paper: #151513;
+  --about-muted: #9f9b92;
+  --about-line: #49473f;
+  background:
+    linear-gradient(90deg, rgb(241 239 232 / 0.045) 1px, transparent 1px),
+    linear-gradient(rgb(241 239 232 / 0.035) 1px, transparent 1px),
+    var(--about-paper);
+}
+
+.about-header,
+.about-hero,
+.origin-section,
+.spaces-section,
+.architecture-section,
+.about-footer {
+  width: min(1240px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+.about-header {
   display: flex;
+  min-height: 76px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 clamp(1.2rem, 4vw, 3rem);
-  height: 64px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--background) 82%, transparent);
-  backdrop-filter: saturate(180%) blur(18px);
-  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border-bottom: 1px solid var(--about-line);
 }
-.bar-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.95rem;
-  letter-spacing: 0.02em;
-}
-.bar-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent);
-  animation: pulse-ring 3s ease-in-out infinite;
-}
-.bar-name {
-  color: var(--foreground);
-}
-.bar-sep {
-  color: var(--muted-foreground);
-  font-weight: 400;
-}
-.bar-crumb {
-  color: var(--muted-foreground);
-  font-weight: 500;
-}
-.bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-.btn-ghost {
+
+.about-brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  height: 42px;
-  padding: 0 1.1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--card);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.86rem;
-  cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-.btn-ghost svg {
-  width: 17px;
-  height: 17px;
-}
-.btn-ghost:hover {
-  border-color: var(--destructive);
-  color: var(--destructive);
-  transform: translateY(-1px);
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
 }
 
-/* ---- main ---- */
-.console-main {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: clamp(2rem, 5vw, 4rem) clamp(1.2rem, 4vw, 3rem) 4rem;
+.about-brand :deep(.brand-mark) { width: 30px; height: 30px; }
+.about-brand strong { font-size: 17px; letter-spacing: -.06em; }
+.about-header nav { display: flex; align-items: center; gap: 23px; }
+.about-header nav > a { color: var(--about-ink); font: 9px 'DM Mono', monospace; letter-spacing: .08em; text-decoration: none; text-transform: uppercase; }
+
+.about-header a:focus-visible,
+.space-grid a:focus-visible {
+  outline: 2px solid var(--about-acid);
+  outline-offset: 5px;
 }
 
-.welcome-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--success);
-  margin-bottom: 0.9rem;
-}
-.welcome-title {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(2.2rem, 5vw, 3.4rem);
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-}
-.title-dot {
-  color: var(--primary);
-}
-.welcome-sub {
-  margin-top: 1rem;
-  max-width: 56ch;
-  color: var(--muted-foreground);
-  font-size: 1.02rem;
-  line-height: 1.65;
-}
-.mono {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  color: var(--foreground);
-  background: var(--muted);
-  padding: 0.1em 0.45em;
-  border-radius: 0.4rem;
-}
-
-/* ---- capability grid ---- */
-.grid-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 0.9rem;
-  margin: 3.5rem 0 1.6rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.3rem;
-  letter-spacing: -0.01em;
-}
-.heading-index {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--primary);
-  letter-spacing: 0.1em;
-}
-.cards {
+.about-hero {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1rem;
-}
-.cap-card {
-  padding: 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--card);
-  box-shadow: var(--shadow-sm);
-  animation: fade-up 0.55s ease both;
-  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-}
-.cap-card:hover {
-  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
-}
-.cap-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.1rem;
-}
-.cap-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 0.8rem;
-  background: color-mix(in srgb, var(--primary) 12%, var(--card));
-  color: var(--primary);
-}
-.cap-glyph svg {
-  width: 21px;
-  height: 21px;
-}
-.cap-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  color: var(--muted-foreground);
-}
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--muted-foreground);
-}
-.cap-status.online .status-dot {
-  background: var(--success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
-}
-.cap-status.online {
-  color: var(--success);
-}
-.cap-name {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.12rem;
-  letter-spacing: -0.01em;
-  margin-bottom: 0.5rem;
-}
-.cap-desc {
-  color: var(--muted-foreground);
-  font-size: 0.9rem;
-  line-height: 1.6;
-  margin-bottom: 1.1rem;
-}
-.cap-tag {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
-  color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  padding: 0.25rem 0.6rem;
-  border-radius: 0.5rem;
+  grid-template-columns: minmax(0, 1.45fr) minmax(270px, .55fr);
+  min-height: min(790px, calc(100vh - 76px));
+  padding: clamp(70px, 10vh, 120px) 0 80px;
+  align-content: space-between;
+  column-gap: 60px;
 }
 
-/* ---- arch note ---- */
-.arch-note {
+.hero-index,
+.section-label {
   display: flex;
-  gap: 1.2rem;
-  margin-top: 3rem;
-  padding: 1.6rem;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--primary);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--primary) 4%, var(--card));
-}
-.note-glyph {
-  flex-shrink: 0;
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 0.7rem;
-  background: var(--card);
-  color: var(--primary);
-  box-shadow: var(--shadow-xs);
-}
-.note-glyph svg {
-  width: 19px;
-  height: 19px;
-  animation: spin 16s linear infinite;
-}
-.note-title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.98rem;
-  margin-bottom: 0.35rem;
-}
-.note-text {
-  color: var(--muted-foreground);
-  font-size: 0.9rem;
-  line-height: 1.65;
+  gap: 13px;
+  color: var(--about-muted);
+  font: 8px 'DM Mono', monospace;
+  letter-spacing: .12em;
 }
 
-@media (max-width: 640px) {
-  .btn-ghost span {
-    display: none;
-  }
-  .arch-note {
-    flex-direction: column;
-  }
+.hero-index { grid-column: 1 / -1; align-self: start; }
+.hero-index i { width: 52px; height: 1px; background: var(--about-acid); }
+
+.about-hero h1 {
+  align-self: end;
+  margin: 0;
+  font-size: clamp(67px, 9.4vw, 145px);
+  font-weight: 800;
+  letter-spacing: -.085em;
+  line-height: .82;
+}
+
+.about-hero h1 em { color: var(--about-acid); font-family: 'Playfair Display', serif; font-weight: 600; }
+.hero-note { align-self: end; padding: 24px 0 7px 24px; border-left: 3px solid var(--about-ink); }
+.hero-note p { margin: 0 0 13px; font-size: 13px; line-height: 1.7; }
+.hero-note span { display: block; margin-top: 30px; color: var(--about-muted); font: 8px 'DM Mono', monospace; letter-spacing: .1em; }
+
+.origin-section {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1.2fr) minmax(260px, .6fr);
+  gap: 45px;
+  padding: clamp(80px, 10vw, 150px) 0;
+  border-top: 1px solid var(--about-line);
+}
+
+.section-label { align-self: start; }
+.section-label span { color: var(--about-ink); }
+.section-label p { margin: 0; }
+.origin-section blockquote { margin: 0; font: 600 clamp(38px, 5.2vw, 78px)/1.08 'Playfair Display', serif; letter-spacing: -.055em; }
+.origin-copy { align-self: end; border-top: 1px solid var(--about-line); padding-top: 20px; }
+.origin-copy p { margin: 0 0 16px; color: var(--about-muted); font-size: 13px; line-height: 1.8; }
+
+.spaces-section { padding: 110px 0 130px; border-top: 1px solid var(--about-line); }
+.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 30px; margin-bottom: 34px; }
+.section-heading > p { width: 360px; margin: 0; color: var(--about-muted); font-size: 12px; line-height: 1.7; }
+.space-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--about-ink); border: 1px solid var(--about-ink); }
+.space-grid article { --module-accent: var(--about-acid); display: flex; min-height: 430px; flex-direction: column; padding: 24px; background: var(--about-paper); }
+.space-grid article > div { display: flex; align-items: center; gap: 10px; font: 8px 'DM Mono', monospace; }
+.space-grid article > div i { height: 1px; flex: 1; background: var(--module-accent); }
+.space-grid h2 { margin: 78px 0 14px; font-size: clamp(32px, 3.2vw, 52px); letter-spacing: -.065em; }
+.space-grid article > p { min-height: 48px; margin: 0; font-size: 13px; font-weight: 700; line-height: 1.55; }
+.space-grid article > small { margin-top: 18px; color: var(--about-muted); font-size: 10px; line-height: 1.7; }
+.space-grid a { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 18px; border-top: 1px solid var(--about-line); color: var(--about-ink); font: 9px 'DM Mono', monospace; text-decoration: none; }
+.space-grid a b { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: var(--module-accent); color: #11110f; font-weight: 400; transition: transform .2s ease; }
+.space-grid a:hover b { transform: rotate(45deg); }
+
+.architecture-section { padding: 110px 0 130px; border-top: 1px solid var(--about-line); }
+.architecture-flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1.2fr; align-items: stretch; gap: 18px; margin-top: 48px; }
+.architecture-flow > i { align-self: center; color: var(--about-muted); font: 18px 'DM Mono', monospace; }
+.flow-stack { display: grid; gap: 1px; background: var(--about-ink); border: 1px solid var(--about-ink); }
+.flow-node { display: grid; min-height: 155px; align-content: space-between; padding: 20px; border: 1px solid var(--about-ink); background: var(--about-paper); }
+.flow-stack .flow-node { border: 0; }
+.flow-node.primary { background: var(--about-ink); color: var(--about-paper); }
+.flow-node.accent { background: var(--about-acid); color: #11110f; }
+.flow-node small,.flow-node span { font: 8px 'DM Mono', monospace; letter-spacing: .08em; }
+.flow-node strong { font-size: clamp(27px, 3vw, 44px); letter-spacing: -.06em; }
+.architecture-note { width: min(590px, 100%); margin: 36px 0 0 auto; color: var(--about-muted); font-size: 13px; line-height: 1.8; }
+
+.author-section { display: grid; grid-template-columns: minmax(250px, .55fr) minmax(0, 1.45fr); background: #11110f; color: #f1efe8; }
+.author-aside { display: flex; min-height: 720px; flex-direction: column; justify-content: space-between; padding: clamp(38px, 5vw, 70px); border-right: 1px solid rgb(241 239 232 / .16); font: 8px 'DM Mono', monospace; letter-spacing: .1em; }
+.author-aside :deep(.brand-mark) { width: clamp(95px, 12vw, 165px); height: auto; }
+.author-aside small { color: rgb(241 239 232 / .42); line-height: 1.8; }
+.author-section article { padding: clamp(60px, 8vw, 120px); }
+.author-kicker { margin: 0 0 26px; color: var(--about-acid); font: 9px 'DM Mono', monospace; letter-spacing: .12em; }
+.author-section h2 { margin: 0 0 55px; font-size: clamp(70px, 10vw, 150px); letter-spacing: -.1em; line-height: .8; }
+.author-section h2 i { color: var(--about-acid); font-style: normal; }
+.author-copy { display: grid; grid-template-columns: 1fr 1fr; gap: 24px 40px; }
+.author-copy p { margin: 0; color: rgb(241 239 232 / .72); font-size: 13px; line-height: 1.9; }
+.author-signoff { margin: 65px 0 0; padding-top: 24px; border-top: 1px solid rgb(241 239 232 / .18); font: italic 600 clamp(18px, 2.2vw, 30px) 'Playfair Display', serif; }
+.about-footer { padding-inline: max(32px, calc((100vw - 1240px) / 2)); width: 100%; }
+
+@media (max-width: 1000px) {
+  .space-grid { grid-template-columns: 1fr 1fr; }
+  .origin-section { grid-template-columns: 150px 1fr; }
+  .origin-copy { grid-column: 2; }
+  .architecture-flow { grid-template-columns: 1fr; }
+  .architecture-flow > i { transform: rotate(90deg); justify-self: center; }
+  .author-copy { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .about-header,.about-hero,.origin-section,.spaces-section,.architecture-section { width: min(100% - 36px, 1240px); }
+  .about-header nav > a:first-child { display: none; }
+  .about-hero { display: block; min-height: auto; padding: 55px 0 75px; }
+  .about-hero h1 { margin-top: 90px; font-size: clamp(55px, 17vw, 92px); }
+  .hero-note { margin: 65px 0 0; }
+  .origin-section { display: block; }
+  .origin-section blockquote { margin: 65px 0; }
+  .space-grid { grid-template-columns: 1fr; }
+  .space-grid article { min-height: 350px; }
+  .section-heading { display: block; }
+  .section-heading > p { width: auto; margin-top: 25px; }
+  .author-section { grid-template-columns: 1fr; }
+  .author-aside { min-height: 280px; border-right: 0; border-bottom: 1px solid rgb(241 239 232 / .16); }
+  .author-aside :deep(.brand-mark) { align-self: end; }
+  .author-section article { padding: 70px 24px; }
+  .about-footer { padding-inline: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .space-grid a b { transition: none; }
 }
 </style>

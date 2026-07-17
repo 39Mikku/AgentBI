@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import ProjectFooter from '@/components/brand/ProjectFooter.vue'
 import HomeModuleEntry from '@/components/home/HomeModuleEntry.vue'
 import HomeRecentConversations from '@/components/home/HomeRecentConversations.vue'
 import quotes from '@/content/home-quotes.json'
@@ -167,11 +168,7 @@ onBeforeUnmount(() => {
       </aside>
     </section>
 
-    <footer class="home-footer">
-      <span>AGENTBI / LOCAL SYSTEM</span>
-      <p>Wonderful tools for curious people.</p>
-      <span>2026 · BUILD IN PROGRESS</span>
-    </footer>
+    <ProjectFooter class="home-footer" />
   </main>
 </template>
 
@@ -243,9 +240,7 @@ onBeforeUnmount(() => {
 .quick-panel a span { font-size: 12px; font-weight: 650; }
 .quick-panel a small { color: #827e75; font: 7px 'DM Mono', monospace; letter-spacing: .08em; }
 .quick-panel a b { font-size: 13px; font-weight: 400; }
-.home-footer { height: 72px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; border-top: 1px solid #bbb6aa; color: #77736b; font: 8px 'DM Mono', monospace; letter-spacing: .1em; }
-.home-footer p { color: var(--ink); font: italic 600 13px 'Playfair Display', serif; letter-spacing: 0; }
-.home-footer span:last-child { justify-self: end; }
+.home-footer { min-height: 96px; }
 .home-reveal { opacity: 0; animation: home-reveal .65s cubic-bezier(.2,.75,.2,1) forwards; animation-delay: var(--delay); }
 @keyframes home-reveal { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
@@ -274,9 +269,6 @@ onBeforeUnmount(() => {
   .hero-clock small { font-size: 10px; margin-left: 7px; }
   .section-heading { display: block; }
   .section-heading p { margin-top: 8px; }
-  .home-footer { grid-template-columns: 1fr auto; }
-  .home-footer p { display: none; }
-  .home-footer span:last-child { font-size: 7px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .home-reveal { opacity: 1; animation: none; }

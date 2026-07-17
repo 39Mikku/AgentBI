@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import BrandMark from '@/components/brand/BrandMark.vue'
+import ProjectFooter from '@/components/brand/ProjectFooter.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { authenticatedDestination } from '@/home/home-auth-route'
 import { getLoginStepPresentation } from '@/login/login-presentation'
@@ -227,10 +228,7 @@ watch(
         </div>
       </div>
 
-      <footer class="workspace-footer">
-        <span>AGENTBI / PERSONAL INTELLIGENCE SYSTEM</span>
-        <span>SECURE ACCESS · LOCAL FIRST</span>
-      </footer>
+      <ProjectFooter class="workspace-footer" compact />
     </section>
   </main>
 </template>
@@ -885,10 +883,6 @@ input {
 .workspace-footer {
   min-height: 62px;
   padding: 0 clamp(28px, 4vw, 60px);
-  border-top: 1px solid var(--login-line);
-  color: var(--login-muted);
-  font: 8px var(--font-mono);
-  letter-spacing: 0.1em;
 }
 
 .step-enter-active,
@@ -998,9 +992,6 @@ input {
     padding-inline: 22px;
   }
 
-  .workspace-footer span:last-child {
-    display: none;
-  }
 }
 
 @media (max-width: 460px) {

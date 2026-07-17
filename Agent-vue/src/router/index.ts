@@ -102,13 +102,17 @@ const router = createRouter({
     },
     { path: '/settings/subagents', redirect: '/settings/capabilities' },
     {
-      path: '/console',
-      name: 'console',
+      path: '/about',
+      name: 'about',
       component: () => import('@/views/AboutView.vue'),
-      meta: { title: '控制台 · AgentBI', requiresAuth: true },
+      meta: { title: '关于 · AgentBI' },
     },
-    { path: '/about', redirect: '/chat' },
-    { path: '/:pathMatch(.*)*', redirect: '/' },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue'),
+      meta: { title: '页面未找到 · AgentBI' },
+    },
   ],
   scrollBehavior: () => ({ top: 0 }),
 })
