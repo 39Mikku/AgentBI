@@ -5,6 +5,8 @@ import ModelAvatar from '@/components/ModelAvatar.vue'
 import TimelineCard from '@/components/cards/TimelineCard.vue'
 import BilibiliPlayerModal from '@/components/BilibiliPlayerModal.vue'
 import AppModeSwitcher from '@/components/AppModeSwitcher.vue'
+import BrandMark from '@/components/brand/BrandMark.vue'
+import WorkspaceRailToggle from '@/components/WorkspaceRailToggle.vue'
 import ToolEventDetails from '@/components/chat/ToolEventDetails.vue'
 import AttachmentComposer from '@/components/chat/AttachmentComposer.vue'
 import MessageAssets from '@/components/chat/MessageAssets.vue'
@@ -19,6 +21,7 @@ import { createRuntimeContext } from '@/utils/runtime-context'
 import { copyMarkdown } from '@/utils/clipboard'
 import { isGeminiThinkingModel, renderReasoningMarkdown } from '@/utils/gemini-thinking'
 import { normalizeReasoningLevel, reasoningChoices } from '@/utils/model-reasoning'
+import { useWorkspaceRail } from '@/composables/useWorkspaceRail'
 import type { ChatMessage, StudioAsset } from '@/api/chat-types'
 import type { BilibiliVideo } from '@/utils/bilibili-player'
 
@@ -32,6 +35,7 @@ const pendingAssets = ref<StudioAsset[]>([])
 const attachmentBusy = ref(false)
 const copiedMessageId = ref('')
 const menuOpen = ref(false)
+const { railCollapsed, toggleRail } = useWorkspaceRail()
 const assistantMenuOpen = ref(false)
 const profileOpen = ref(false)
 const profileBusy = ref(false)
@@ -290,11 +294,12 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="workbench" :class="{ 'sidebar-open': menuOpen }">
+  <div class="workbench" :class="{ 'sidebar-open': menuOpen, 'rail-collapsed': railCollapsed }">
     <aside class="rail">
-      <button class="rail-brand" type="button" title="返回主页" @click="router.push('/home')"><span class="brand-orbit"></span><span>OBSIDIAN</span><i>AI</i></button>
-      <AppModeSwitcher active="studio" class="rail-mode-switcher" />
-      <button class="new-session" @click="newChat"><span>＋</span> 新建对话 <kbd>⌘ K</kbd></button>
+      <WorkspaceRailToggle :collapsed="railCollapsed" @toggle="toggleRail" />
+      <button class="rail-brand" type="button" title="返回主页" @click="router.push('/home')"><BrandMark class="rail-brand-mark" tone="inverse" /><span>AGENTBI</span><i>STUDIO</i></button>
+      <AppModeSwitcher active="studio" :collapsed="railCollapsed" class="rail-mode-switcher" />
+      <button class="new-session" title="新建对话" @click="newChat"><span>＋</span><b>新建对话</b><kbd>⌘ K</kbd></button>
       <div class="assistant-switch">
         <button class="assistant-current" @click="assistantMenuOpen = !assistantMenuOpen">
           <img
@@ -302,6 +307,7 @@ onMounted(async () => {
             :src="chat.activeAssistant.avatar_data_url"
             alt=""
           />
+          <BrandMark v-else-if="chat.activeAssistant?.is_default" class="assistant-brand-avatar" tone="inverse" />
           <span v-else>{{ assistantInitials }}</span>
           <small>当前助手</small><strong>{{ assistantName }}</strong
           ><b>⌄</b>
@@ -313,8 +319,11 @@ onMounted(async () => {
             :class="{ active: assistant.id === chat.activeAssistantId }"
             @click="switchAssistant(assistant.id)"
           >
-            <img v-if="assistant.avatar_data_url" :src="assistant.avatar_data_url" alt="" /><span
-              v-else
+            <img v-if="assistant.avatar_data_url" :src="assistant.avatar_data_url" alt="" /><BrandMark
+              v-else-if="assistant.is_default"
+              class="assistant-menu-brand"
+              tone="inverse"
+            /><span v-else
               >{{ assistant.name.slice(0, 2).toUpperCase() }}</span
             >{{ assistant.name }}
           </button>
@@ -372,10 +381,10 @@ onMounted(async () => {
             ><small>{{ profile?.email || userId }}</small></span
           ><b>›</b>
         </button>
-        <button @click="router.push('/settings/models')">◈ 模型工作室</button>
-        <button @click="router.push('/attachments')">▧ 附件库</button>
-        <button @click="router.push('/toolbox')">⌘ 工具箱</button>
-        <button @click="logout">↗ 退出会话</button>
+        <button title="模型工作室" @click="router.push('/settings/models')"><span class="footer-icon">◈</span><span class="footer-label">模型工作室</span></button>
+        <button title="附件库" @click="router.push('/attachments')"><span class="footer-icon">▧</span><span class="footer-label">附件库</span></button>
+        <button title="工具箱" @click="router.push('/toolbox')"><span class="footer-icon">⌘</span><span class="footer-label">工具箱</span></button>
+        <button title="退出会话" @click="logout"><span class="footer-icon">↗</span><span class="footer-label">退出会话</span></button>
       </div>
     </aside>
 
@@ -428,6 +437,7 @@ onMounted(async () => {
               :src="chat.activeAssistant.avatar_data_url"
               alt=""
             />
+            <BrandMark v-else-if="chat.activeAssistant?.is_default" class="message-brand-avatar" tone="inverse" />
             <ModelAvatar v-else :model="modelLabel" />
           </div>
           <div class="message-body">
@@ -701,6 +711,7 @@ onMounted(async () => {
   grid-template-columns: 286px minmax(0, 1fr);
   font-family: Manrope, sans-serif;
   position: relative;
+  transition: grid-template-columns 0.28s cubic-bezier(.2,.8,.2,1);
 }
 .workbench:before {
   content: '';
@@ -723,6 +734,8 @@ onMounted(async () => {
   padding: 28px 18px 20px;
   display: flex;
   flex-direction: column;
+  position: relative;
+  transition: padding 0.28s cubic-bezier(.2,.8,.2,1);
 }
 .rail-brand {
   width: 100%;
@@ -744,20 +757,7 @@ onMounted(async () => {
   font-style: normal;
   color: var(--acid);
 }
-.brand-orbit {
-  height: 17px;
-  width: 17px;
-  border: 2px solid var(--acid);
-  border-radius: 50%;
-  position: relative;
-}
-.brand-orbit:after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: var(--acid);
-}
+.rail-brand-mark { width:20px; height:20px; flex:0 0 auto; }
 .rail-mode-switcher {
   flex: 0 0 auto;
   margin: -15px 0 14px;
@@ -780,6 +780,7 @@ onMounted(async () => {
   vertical-align: -2px;
   margin-right: 8px;
 }
+.new-session b { font:inherit; font-weight:600; }
 .new-session kbd {
   float: right;
   color: #838383;
@@ -811,7 +812,8 @@ onMounted(async () => {
   cursor: pointer;
 }
 .assistant-current img,
-.assistant-current > span {
+.assistant-current > span,
+.assistant-current .assistant-brand-avatar {
   grid-row: 1/3;
   width: 30px;
   height: 30px;
@@ -823,6 +825,7 @@ onMounted(async () => {
   place-items: center;
   font: 9px 'DM Mono';
 }
+.assistant-current .assistant-brand-avatar { padding:5px; background:#111; }
 .assistant-current small {
   font: 8px 'DM Mono';
   letter-spacing: 0.1em;
@@ -870,7 +873,8 @@ onMounted(async () => {
   color: #fff;
 }
 .assistant-menu img,
-.assistant-menu span {
+.assistant-menu span,
+.assistant-menu .assistant-menu-brand {
   width: 22px;
   height: 22px;
   border-radius: 6px;
@@ -881,6 +885,7 @@ onMounted(async () => {
   place-items: center;
   font: 8px 'DM Mono';
 }
+.assistant-menu .assistant-menu-brand { flex:0 0 auto; padding:4px; background:#111; }
 .assistant-menu .assistant-manage {
   margin-top: 4px;
   padding-top: 10px;
@@ -1031,7 +1036,11 @@ onMounted(async () => {
   text-align: left;
   font: 11px Manrope;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+.footer-icon { width:16px; flex:0 0 auto; text-align:center; color:var(--acid); font:11px 'DM Mono'; }
 .rail-footer > button:hover {
   color: var(--acid);
 }
@@ -1225,6 +1234,7 @@ onMounted(async () => {
   box-shadow: none;
   clip-path: none;
 }
+.avatar .message-brand-avatar { width:31px; height:31px; padding:7px; border-radius:50%; background:#171717; }
 .message-meta {
   font: 10px 'DM Mono';
   letter-spacing: 0.1em;
@@ -1667,6 +1677,26 @@ textarea {
   50% {
     opacity: 0;
   }
+}
+@media (min-width: 821px) {
+  .workbench.rail-collapsed { grid-template-columns:72px minmax(0,1fr); }
+  .rail-collapsed .rail { padding-inline:10px; }
+  .rail-collapsed .rail-brand { justify-content:center; padding-inline:0; }
+  .rail-collapsed .rail-brand > span,
+  .rail-collapsed .rail-brand > i { display:none; }
+  .rail-collapsed .rail-mode-switcher { margin-inline:0; }
+  .rail-collapsed .new-session { min-height:45px; display:grid; place-items:center; padding:0; }
+  .rail-collapsed .new-session span { margin:0; font-size:22px; }
+  .rail-collapsed .new-session b,
+  .rail-collapsed .new-session kbd,
+  .rail-collapsed .assistant-switch,
+  .rail-collapsed .rail-label,
+  .rail-collapsed .conversation-list,
+  .rail-collapsed .user-card { display:none; }
+  .rail-collapsed .rail-footer { margin-top:auto; }
+  .rail-collapsed .rail-footer > button { justify-content:center; min-height:36px; padding:8px 0; }
+  .rail-collapsed .footer-label { display:none; }
+  .rail-collapsed .footer-icon { width:auto; font-size:13px; }
 }
 @media (max-width: 760px) {
   .workbench {

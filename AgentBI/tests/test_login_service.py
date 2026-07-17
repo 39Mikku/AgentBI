@@ -39,6 +39,18 @@ class LoginServiceTests(unittest.TestCase):
         self.assertEqual(result["target_email"], existing["email"])
         self.assertEqual(user["user_id"], existing["user_id"])
 
+    def test_login_code_content_has_branded_html_and_plain_fallback(self):
+        from AgentBI.src.services.login_service import build_login_code_content
+
+        plain, html = build_login_code_content("908712")
+
+        self.assertIn("908712", plain)
+        self.assertIn("5 分钟", plain)
+        self.assertIn("908712", html)
+        self.assertIn("AgentBI", html)
+        self.assertIn("5 分钟", html)
+        self.assertIn("如果不是你本人操作", html)
+
     def test_login_response_returns_the_persisted_avatar(self):
         from AgentBI.src.api.api import login_response
 

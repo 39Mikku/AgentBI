@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">AgentBI</title>
+  <path fill="#11110f" d="M24 220 116 32v140l-36 48H24Z"/>
+  <path fill="#d9ff36" d="M136 38h57c24 0 43 18 43 41s-19 41-43 41h-57V38Zm0 100h57c24 0 43 18 43 41s-19 41-43 41h-57v-82Z"/>
+</svg>

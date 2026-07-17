@@ -1,16 +1,18 @@
 <script setup lang="ts">
-defineProps<{ active: 'studio' | 'live' | 'test' }>()
+withDefaults(defineProps<{ active: 'studio' | 'live' | 'test'; collapsed?: boolean }>(), {
+  collapsed: false,
+})
 </script>
 
 <template>
-  <nav class="mode-switcher" aria-label="工作模式">
-    <RouterLink to="/chat" :class="{ active: active === 'studio' }">
+  <nav class="mode-switcher" :class="{ collapsed }" aria-label="工作模式">
+    <RouterLink to="/chat" title="Studio" :class="{ active: active === 'studio' }">
       <span class="mode-index">01</span><strong>Studio</strong><i></i>
     </RouterLink>
-    <RouterLink to="/live" :class="{ active: active === 'live' }">
+    <RouterLink to="/live" title="Live" :class="{ active: active === 'live' }">
       <span class="mode-index">02</span><strong>Live</strong><i></i>
     </RouterLink>
-    <RouterLink to="/test" :class="{ active: active === 'test' }">
+    <RouterLink to="/test" title="Test" :class="{ active: active === 'test' }">
       <span class="mode-index">03</span><strong>Test</strong><i></i>
     </RouterLink>
   </nav>
@@ -71,5 +73,25 @@ defineProps<{ active: 'studio' | 'live' | 'test' }>()
 .mode-switcher a.active i {
   transform: scaleX(1);
   opacity: 0.9;
+}
+.mode-switcher.collapsed {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.mode-switcher.collapsed a {
+  display: grid;
+  grid-template: 1fr / 1fr;
+  place-items: center;
+  min-height: 38px;
+  padding: 0;
+}
+.mode-switcher.collapsed .mode-index {
+  grid-row: auto;
+  font-size: 9px;
+  opacity: 0.82;
+}
+.mode-switcher.collapsed strong,
+.mode-switcher.collapsed i {
+  display: none;
 }
 </style>

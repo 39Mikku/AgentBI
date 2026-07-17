@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="Agent-vue/public/brand/agentbi-mark.svg" width="88" alt="AgentBI Logo" />
+
 # AgentBI
 
 **一个为个人工作流构建的多模型 AI 工作台。**
@@ -13,6 +15,8 @@ Studio、实时语音、测试实验室与实用工具共享同一套本地身�
 [项目网站](http://elysiareal.me/) · `LOCAL FIRST` · `MULTI MODEL` · `AGENT READY`
 
 </div>
+
+![AgentBI Personal AI Workbench](Agent-vue/public/brand/og-agentbi.png)
 
 ---
 
@@ -83,4 +87,3 @@ npm run dev
 ```
 
 模型、邮箱及第三方能力通过 `AgentBI/.env` 与应用内配置页维护。该仓库用于个人持续开发，不面向公共部署。
-

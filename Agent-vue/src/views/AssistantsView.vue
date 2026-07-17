@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { AssistantProfile } from '@/api/chat-types'
 import { getPreferences } from '@/api/chat'
 import ImageSourcePicker from '@/components/ImageSourcePicker.vue'
+import BrandMark from '@/components/brand/BrandMark.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -190,8 +191,11 @@ onMounted(() => {
           :class="{ selected: assistant.id === selectedId }"
           @click="edit(assistant)"
         >
-          <img v-if="assistant.avatar_data_url" :src="assistant.avatar_data_url" alt="" /><span
-            v-else
+          <img v-if="assistant.avatar_data_url" :src="assistant.avatar_data_url" alt="" /><BrandMark
+            v-else-if="assistant.is_default"
+            class="assistant-brand-mark"
+            tone="inverse"
+          /><span v-else
             >{{ assistant.name.slice(0, 2).toUpperCase() }}</span
           ><i>{{ assistant.is_default ? 'DEFAULT' : 'CUSTOM' }}</i
           ><strong>{{ assistant.name }}</strong
@@ -364,7 +368,8 @@ onMounted(() => {
   border-color: #575757;
 }
 .assistant-card img,
-.assistant-card > span {
+.assistant-card > span,
+.assistant-card .assistant-brand-mark {
   grid-row: 1/3;
   width: 38px;
   height: 38px;
@@ -376,6 +381,7 @@ onMounted(() => {
   place-items: center;
   font: 10px 'DM Mono';
 }
+.assistant-card .assistant-brand-mark { padding:7px; background:#111; }
 .assistant-card strong {
   font-size: 12px;
 }

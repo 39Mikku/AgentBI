@@ -1,6 +1,6 @@
 import os
 import smtplib
-from email.mime.text import MIMEText
+from email.message import EmailMessage
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -37,17 +37,39 @@ def smtp_settings() -> tuple[str, int, str, str]:
     return host, port, sender, password
 
 
-def send_email_message(to: str, subject: str, content: str) -> str:
+def build_email_message(
+    to: str,
+    subject: str,
+    content: str,
+    *,
+    sender: str,
+    html_content: str | None = None,
+) -> EmailMessage:
+    """Build a standards-compatible message with an optional HTML alternative."""
+    message = EmailMessage()
+    message["To"] = to
+    message["From"] = sender
+    message["Subject"] = subject
+    message.set_content(content)
+    if html_content:
+        message.add_alternative(html_content, subtype="html")
+    return message
+
+
+def send_email_message(
+    to: str,
+    subject: str,
+    content: str,
+    *,
+    html_content: str | None = None,
+) -> str:
     """Send one SMTP message without involving an LLM or LangChain tool wrapper."""
     try:
         host, port, sender, password = smtp_settings()
-        message = MIMEText(content)
-        message["To"] = to
-        message["From"] = sender
-        message["Subject"] = subject
+        message = build_email_message(to, subject, content, sender=sender, html_content=html_content)
         with smtplib.SMTP_SSL(host, port=port, timeout=20) as smtp:
             smtp.login(sender, password)
-            smtp.sendmail(sender, to, message.as_string())
+            smtp.send_message(message, from_addr=sender, to_addrs=[to])
         return "邮件发送成功"
     except Exception as error:
         raise RuntimeError(f"邮件发送失败: {error}") from error
