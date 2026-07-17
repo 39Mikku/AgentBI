@@ -47,6 +47,18 @@ const router = createRouter({
       meta: { title: 'Live · AgentBI', requiresAuth: true },
     },
     {
+      path: '/playground/manage',
+      name: 'playground-manage',
+      component: () => import('@/views/PlaygroundProfilesView.vue'),
+      meta: { title: '角色与世界 · AgentBI', requiresAuth: true },
+    },
+    {
+      path: '/playground',
+      name: 'playground',
+      component: () => import('@/views/PlaygroundView.vue'),
+      meta: { title: 'Playground · AgentBI', requiresAuth: true },
+    },
+    {
       path: '/test',
       name: 'test',
       component: () => import('@/views/TestView.vue'),

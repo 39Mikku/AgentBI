@@ -1,6 +1,6 @@
 export interface ProjectModule {
   index: string
-  name: 'Studio' | 'Live' | 'Test' | 'Toolbox'
+  name: 'Studio' | 'Live' | 'Test' | 'Playground' | 'Toolbox'
   description: string
   detail: string
   to: string
@@ -55,6 +55,14 @@ export const PROJECT_MODULES: readonly ProjectModule[] = [
   },
   {
     index: '04',
+    name: 'Playground',
+    description: '角色、世界书与长篇叙事空间',
+    detail: '把角色卡、模块化提示词、世界书、状态与长会话精炼收进一条沉浸式故事线。',
+    to: '/playground',
+    accent: '#d7ff3f',
+  },
+  {
+    index: 'U1',
     name: 'Toolbox',
     description: '即开即用的本地小型工作台',
     detail: '收纳语音、表情包、百科归档和文件处理等不必对话的小工具。',

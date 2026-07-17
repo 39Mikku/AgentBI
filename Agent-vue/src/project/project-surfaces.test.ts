@@ -14,13 +14,15 @@ describe('project surfaces content', () => {
     expect(AUTHOR_PARAGRAPHS.at(-1)).toBe('Built for myself, expanded by curiosity.')
   })
 
-  it('presents the four workspaces in product order', () => {
+  it('presents four main workspaces and keeps Toolbox as a secondary surface', () => {
     expect(PROJECT_MODULES.map((module) => module.name)).toEqual([
       'Studio',
       'Live',
       'Test',
+      'Playground',
       'Toolbox',
     ])
+    expect(PROJECT_MODULES.find((module) => module.name === 'Playground')?.to).toBe('/playground')
   })
 
   it('publishes only real project destinations', () => {

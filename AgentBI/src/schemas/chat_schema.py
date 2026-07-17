@@ -62,6 +62,9 @@ class ConversationResponse(BaseModel):
     source_thread_id: str | None = None
     source_message_id: str | None = None
     assistant_id: str | None = None
+    workspace_type: str = "studio"
+    owner_type: str | None = None
+    owner_id: str | None = None
 
     @classmethod
     def from_document(cls, document: dict[str, Any]) -> "ConversationResponse":
@@ -80,6 +83,9 @@ class ConversationResponse(BaseModel):
             source_thread_id=str(document["source_thread_id"]) if document.get("source_thread_id") else None,
             source_message_id=str(document["source_message_id"]) if document.get("source_message_id") else None,
             assistant_id=str(document["assistant_id"]) if document.get("assistant_id") else None,
+            workspace_type=document.get("workspace_type", "studio"),
+            owner_type=document.get("owner_type"),
+            owner_id=str(document["owner_id"]) if document.get("owner_id") else None,
         )
 
 
@@ -99,6 +105,7 @@ class ChatMessageResponse(BaseModel):
     sibling_index: int = 0
     version_ids: list[str] = Field(default_factory=list)
     model_snapshot: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     assets: list[StudioAssetResponse] = Field(default_factory=list)
 
     @classmethod
@@ -119,6 +126,7 @@ class ChatMessageResponse(BaseModel):
             sibling_index=document.get("sibling_index", 0),
             version_ids=document.get("version_ids", []),
             model_snapshot=document.get("model_snapshot", {}),
+            metadata=document.get("metadata", {}),
             assets=[StudioAssetResponse.from_document(item) for item in document.get("assets", [])],
         )
 

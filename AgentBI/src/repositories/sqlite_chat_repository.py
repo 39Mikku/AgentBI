@@ -137,7 +137,8 @@ class SqliteChatRepository:
                 CREATE TABLE IF NOT EXISTS chat_threads (
                     id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, provider_id TEXT,
                     model TEXT, temperature REAL NOT NULL, context_turns INTEGER NOT NULL,
-                    assistant_id TEXT, active_message_id TEXT, root_message_id TEXT,
+                    assistant_id TEXT, workspace_type TEXT NOT NULL DEFAULT 'studio',
+                    owner_type TEXT, owner_id TEXT, active_message_id TEXT, root_message_id TEXT,
                     source_thread_id TEXT, source_message_id TEXT,
                     context_summary TEXT, context_summary_until_message_id TEXT,
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_message_at TEXT NOT NULL
@@ -148,6 +149,7 @@ class SqliteChatRepository:
                     role TEXT NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL, depth INTEGER NOT NULL,
                     sibling_group_id TEXT, reasoning_summary TEXT, tool_events TEXT NOT NULL DEFAULT '[]',
                     timeline TEXT NOT NULL DEFAULT '[]', model_snapshot TEXT NOT NULL DEFAULT '{}', run_id TEXT,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS chat_runs (
@@ -238,6 +240,12 @@ class SqliteChatRepository:
             thread_columns = {
                 "context_summary": "TEXT",
                 "context_summary_until_message_id": "TEXT",
+                "workspace_type": "TEXT NOT NULL DEFAULT 'studio'",
+                "owner_type": "TEXT",
+                "owner_id": "TEXT",
+            }
+            message_columns = {
+                "metadata_json": "TEXT NOT NULL DEFAULT '{}'",
             }
             live_preference_columns = {
                 "history_context_turns": "INTEGER NOT NULL DEFAULT 12",
@@ -258,6 +266,12 @@ class SqliteChatRepository:
                 self._ensure_column("assistants", name, definition)
             for name, definition in thread_columns.items():
                 self._ensure_column("chat_threads", name, definition)
+            for name, definition in message_columns.items():
+                self._ensure_column("chat_messages", name, definition)
+            self._connection.execute(
+                """CREATE INDEX IF NOT EXISTS threads_by_workspace_owner
+                ON chat_threads(user_id, workspace_type, owner_type, owner_id, last_message_at DESC)"""
+            )
             for name, definition in live_preference_columns.items():
                 self._ensure_column("live_preferences", name, definition)
             for name, definition in chat_preference_columns.items():
@@ -339,8 +353,13 @@ class SqliteChatRepository:
             return None
         item = dict(row)
         item["_id"] = item.pop("id")
-        for name, fallback in (("tool_events", []), ("timeline", []), ("model_snapshot", {})):
-            item[name] = self._json_load(item[name], fallback)
+        for name, fallback in (("tool_events", []), ("timeline", []), ("model_snapshot", {}), ("metadata_json", {})):
+            value = self._json_load(item[name], fallback)
+            if name == "metadata_json":
+                item["metadata"] = value
+                item.pop(name, None)
+            else:
+                item[name] = value
         item["created_at"] = self._parse_time(item["created_at"])
         item["updated_at"] = self._parse_time(item["updated_at"])
         item["assets"] = self.list_message_assets(item["_id"], item["user_id"])
@@ -1349,21 +1368,27 @@ class SqliteChatRepository:
 
     def create_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
         thread_id, root_id, now = self._id(), self._id(), self._time()
+        workspace_type = str(payload.get("workspace_type") or "studio")
+        assistant_id = payload.get("assistant_id")
+        owner_type = payload.get("owner_type") or ("assistant" if assistant_id else None)
+        owner_id = payload.get("owner_id") or assistant_id
         with self._lock, self._connection:
             self._connection.execute(
                 """INSERT INTO chat_threads(
                     id, user_id, title, provider_id, model, temperature, context_turns, assistant_id,
+                    workspace_type, owner_type, owner_id,
                     active_message_id, root_message_id, source_thread_id, source_message_id,
                     context_summary, context_summary_until_message_id, created_at, updated_at, last_message_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?)""",
                 (thread_id, payload["user_id"], payload["title"], payload.get("provider_id"), payload.get("model"),
-                 payload.get("temperature", 0.7), payload.get("context_turns", 8), payload.get("assistant_id"), root_id,
+                 payload.get("temperature", 0.7), payload.get("context_turns", 8), assistant_id,
+                 workspace_type, owner_type, owner_id, root_id,
                  payload.get("source_thread_id"), payload.get("source_message_id"), now, now, now),
             )
             self._connection.execute(
                 """INSERT INTO chat_messages(id, thread_id, user_id, parent_id, role, content, status, depth, sibling_group_id,
-                reasoning_summary, tool_events, timeline, model_snapshot, run_id, created_at, updated_at)
-                VALUES (?, ?, ?, NULL, 'root', '', 'complete', 0, NULL, NULL, '[]', '[]', '{}', NULL, ?, ?)""",
+                reasoning_summary, tool_events, timeline, model_snapshot, run_id, metadata_json, created_at, updated_at)
+                VALUES (?, ?, ?, NULL, 'root', '', 'complete', 0, NULL, NULL, '[]', '[]', '{}', NULL, '{}', ?, ?)""",
                 (root_id, thread_id, payload["user_id"], now, now),
             )
         return self.get_conversation(thread_id, payload["user_id"])  # type: ignore[return-value]
@@ -1371,12 +1396,47 @@ class SqliteChatRepository:
     def list_conversations(self, user_id: str, assistant_id: str | None = None) -> list[dict[str, Any]]:
         selected = assistant_id or self.ensure_default_assistant(user_id)["_id"]
         with self._lock:
-            rows = self._all("SELECT * FROM chat_threads WHERE user_id = ? AND assistant_id = ? ORDER BY last_message_at DESC", (user_id, selected))
+            rows = self._all(
+                """SELECT * FROM chat_threads
+                WHERE user_id = ? AND assistant_id = ? AND workspace_type = 'studio'
+                ORDER BY last_message_at DESC""",
+                (user_id, selected),
+            )
+        return [self._thread_document(row) for row in rows]  # type: ignore[list-item]
+
+    def list_workspace_conversations(
+        self,
+        user_id: str,
+        workspace_type: str,
+        owner_type: str,
+        owner_id: str,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._all(
+                """SELECT * FROM chat_threads
+                WHERE user_id = ? AND workspace_type = ? AND owner_type = ? AND owner_id = ?
+                ORDER BY last_message_at DESC""",
+                (user_id, workspace_type, owner_type, owner_id),
+            )
         return [self._thread_document(row) for row in rows]  # type: ignore[list-item]
 
     def get_conversation(self, conversation_id: str, user_id: str) -> dict[str, Any] | None:
         with self._lock:
             return self._thread_document(self._one("SELECT * FROM chat_threads WHERE id = ? AND user_id = ?", (conversation_id, user_id)))
+
+    def get_workspace_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        workspace_type: str,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._one(
+                """SELECT * FROM chat_threads
+                WHERE id = ? AND user_id = ? AND workspace_type = ?""",
+                (conversation_id, user_id, workspace_type),
+            )
+        return self._thread_document(row)
 
     def update_conversation(self, conversation_id: str, user_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
         allowed = {"title", "provider_id", "model", "temperature", "context_turns", "assistant_id", "active_message_id", "context_summary", "context_summary_until_message_id"}
@@ -1442,10 +1502,15 @@ class SqliteChatRepository:
         message_id, now = self._id(), self._time()
         with self._lock, self._connection:
             self._connection.execute(
-                """INSERT INTO chat_messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)""",
+                """INSERT INTO chat_messages(
+                    id, thread_id, user_id, parent_id, role, content, status, depth,
+                    sibling_group_id, reasoning_summary, tool_events, timeline,
+                    model_snapshot, run_id, metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)""",
                 (message_id, thread["_id"], thread["user_id"], parent["_id"], role, content, status, parent.get("depth", 0) + 1,
                  sibling_group_id, extra.get("reasoning_summary"), self._json_dump(extra.get("tool_events", [])),
-                 self._json_dump(extra.get("timeline", [])), self._json_dump(extra.get("model_snapshot", {})), now, now),
+                 self._json_dump(extra.get("timeline", [])), self._json_dump(extra.get("model_snapshot", {})),
+                 self._json_dump(extra.get("metadata", {})), now, now),
             )
             self._connection.execute("UPDATE chat_threads SET active_message_id = ?, updated_at = ?, last_message_at = ? WHERE id = ?", (message_id, now, now, thread["_id"]))
         return self._get_message(message_id, thread["_id"], thread["user_id"])  # type: ignore[return-value]
@@ -1456,6 +1521,16 @@ class SqliteChatRepository:
             return None
         parent = self._get_message(parent_message_id or thread.get("active_message_id") or thread.get("root_message_id"), thread["_id"], user_id)
         return self._insert_message(thread, parent, "user", content) if parent else None
+
+    def create_opening_assistant_message(
+        self,
+        conversation_id: str,
+        user_id: str,
+        content: str,
+    ) -> dict[str, Any] | None:
+        thread = self.get_workspace_conversation(conversation_id, user_id, "playground")
+        root = self._get_message(thread.get("root_message_id"), conversation_id, user_id) if thread else None
+        return self._insert_message(thread, root, "assistant", content) if thread and root else None
 
     def _create_run(self, thread: dict[str, Any], message_id: str, snapshot: dict[str, Any] | None) -> str:
         run_id, now = self._id(), self._time()
@@ -1496,6 +1571,19 @@ class SqliteChatRepository:
         self.copy_message_assets(source["_id"], message["_id"])
         return self._get_message(message["_id"], message["thread_id"], user_id)
 
+    def edit_opening_assistant_message(
+        self,
+        conversation_id: str,
+        user_id: str,
+        message_id: str,
+        content: str,
+    ) -> dict[str, Any] | None:
+        thread = self.get_workspace_conversation(conversation_id, user_id, "playground")
+        source = self._get_message(message_id, conversation_id, user_id) if thread else None
+        if not source or source.get("role") != "assistant" or int(source.get("depth", 0)) != 1:
+            return None
+        return self._create_sibling(source, content, status="complete", metadata={})
+
     def retry_assistant_message(self, conversation_id: str, user_id: str, message_id: str, model_snapshot: dict[str, Any] | None = None) -> dict[str, Any] | None:
         thread = self.get_conversation(conversation_id, user_id)
         source = self._get_message(message_id, thread["_id"], user_id) if thread else None
@@ -1510,10 +1598,15 @@ class SqliteChatRepository:
     def _finish_assistant_message(self, message_id: str, content: str, status: str, **extra: Any) -> dict[str, Any] | None:
         now = self._time()
         assignments, params = ["content = ?", "status = ?", "updated_at = ?"], [content, status, now]
-        for key in ("reasoning_summary", "tool_events", "timeline", "model_snapshot"):
+        for key in ("reasoning_summary", "tool_events", "timeline", "model_snapshot", "metadata"):
             if key in extra:
-                assignments.append(f"{key} = ?")
-                params.append(self._json_dump(extra[key]) if key in {"tool_events", "timeline", "model_snapshot"} else extra[key])
+                column = "metadata_json" if key == "metadata" else key
+                assignments.append(f"{column} = ?")
+                params.append(
+                    self._json_dump(extra[key])
+                    if key in {"tool_events", "timeline", "model_snapshot", "metadata"}
+                    else extra[key]
+                )
         params.append(message_id)
         with self._lock, self._connection:
             self._connection.execute(f"UPDATE chat_messages SET {', '.join(assignments)} WHERE id = ? AND role = 'assistant'", tuple(params))
@@ -1524,6 +1617,32 @@ class SqliteChatRepository:
 
     def complete_assistant_message(self, message_id: str, content: str, **extra: Any) -> dict[str, Any] | None:
         return self._finish_assistant_message(message_id, content, "complete", **extra)
+
+    def update_message_metadata(
+        self,
+        message_id: str,
+        user_id: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        with self._lock, self._connection:
+            row = self._one(
+                "SELECT * FROM chat_messages WHERE id = ? AND user_id = ?",
+                (message_id, user_id),
+            )
+            if not row:
+                return None
+            current = self._json_load(row["metadata_json"], {})
+            current.update(metadata)
+            self._connection.execute(
+                """UPDATE chat_messages SET metadata_json = ?, updated_at = ?
+                WHERE id = ? AND user_id = ?""",
+                (self._json_dump(current), self._time(), message_id, user_id),
+            )
+            updated = self._one(
+                "SELECT * FROM chat_messages WHERE id = ? AND user_id = ?",
+                (message_id, user_id),
+            )
+        return self._message_document(updated)
 
     def fail_assistant_message(self, message_id: str, content: str) -> dict[str, Any] | None:
         return self._finish_assistant_message(message_id, content, "error")
@@ -1612,7 +1731,15 @@ class SqliteChatRepository:
             )
         return [self._message_document(row) for row in rows]  # type: ignore[list-item]
 
-    def create_branch_conversation(self, conversation_id: str, user_id: str, source_message_id: str, title: str | None = None) -> dict[str, Any] | None:
+    def _copy_branch_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        source_message_id: str,
+        title: str | None,
+        *,
+        return_message_map: bool,
+    ) -> dict[str, Any] | tuple[dict[str, Any], dict[str, str]] | None:
         source_thread = self.get_conversation(conversation_id, user_id)
         source_message = self._get_message(source_message_id, source_thread["_id"], user_id) if source_thread else None
         if not source_thread or not source_message or source_message.get("role") == "root":
@@ -1621,7 +1748,11 @@ class SqliteChatRepository:
             "user_id": user_id, "title": title or f"{source_thread.get('title', 'Untitled')} · branch",
             "provider_id": source_thread.get("provider_id"), "model": source_thread.get("model"),
             "temperature": source_thread.get("temperature", 0.7), "context_turns": source_thread.get("context_turns", 8),
-            "assistant_id": source_thread.get("assistant_id"), "source_thread_id": source_thread["_id"], "source_message_id": source_message["_id"],
+            "assistant_id": source_thread.get("assistant_id"),
+            "workspace_type": source_thread.get("workspace_type", "studio"),
+            "owner_type": source_thread.get("owner_type"),
+            "owner_id": source_thread.get("owner_id"),
+            "source_thread_id": source_thread["_id"], "source_message_id": source_message["_id"],
         })
         copied_path = self._get_path(source_thread, source_message["_id"])
         source_to_copy = {source_thread["root_message_id"]: copied["root_message_id"]}
@@ -1630,13 +1761,60 @@ class SqliteChatRepository:
             if source.get("role") == "root":
                 continue
             parent = self._get_message(source_to_copy[source["parent_id"]], copied["_id"], user_id)
-            copied_message = self._insert_message(copied, parent, source["role"], source.get("content", ""), status=source.get("status", "complete"), sibling_group_id=source.get("sibling_group_id"), reasoning_summary=source.get("reasoning_summary"), tool_events=source.get("tool_events", []), timeline=source.get("timeline", []), model_snapshot=source.get("model_snapshot", {}))
+            copied_message = self._insert_message(
+                copied,
+                parent,
+                source["role"],
+                source.get("content", ""),
+                status=source.get("status", "complete"),
+                sibling_group_id=source.get("sibling_group_id"),
+                reasoning_summary=source.get("reasoning_summary"),
+                tool_events=source.get("tool_events", []),
+                timeline=source.get("timeline", []),
+                model_snapshot=source.get("model_snapshot", {}),
+                metadata=source.get("metadata", {}),
+            )
             self.copy_message_assets(source["_id"], copied_message["_id"])
             source_to_copy[source["_id"]] = copied_message["_id"]
             copied_active = copied_message["_id"]
         if copied_active:
             self._touch_thread(copied["_id"], copied_active)
-        return self.get_conversation(copied["_id"], user_id)
+        branch = self.get_conversation(copied["_id"], user_id)
+        if not branch:
+            return None
+        return (branch, source_to_copy) if return_message_map else branch
+
+    def create_branch_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        source_message_id: str,
+        title: str | None = None,
+    ) -> dict[str, Any] | None:
+        result = self._copy_branch_conversation(
+            conversation_id,
+            user_id,
+            source_message_id,
+            title,
+            return_message_map=False,
+        )
+        return result if isinstance(result, dict) else None
+
+    def create_branch_conversation_with_map(
+        self,
+        conversation_id: str,
+        user_id: str,
+        source_message_id: str,
+        title: str | None = None,
+    ) -> tuple[dict[str, Any], dict[str, str]] | None:
+        result = self._copy_branch_conversation(
+            conversation_id,
+            user_id,
+            source_message_id,
+            title,
+            return_message_map=True,
+        )
+        return result if isinstance(result, tuple) else None
 
     def append_message(self, conversation_id: str, user_id: str, role: str, content: str, **extra: Any) -> dict[str, Any] | None:
         if role == "user":

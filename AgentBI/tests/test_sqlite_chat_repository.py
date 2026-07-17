@@ -93,6 +93,71 @@ class SqliteChatRepositoryTests(unittest.TestCase):
             ["", "Question", "Answer"],
         )
 
+    def test_workspace_threads_are_isolated_and_message_metadata_round_trips(self):
+        playground = self.repository.create_conversation(
+            {
+                "user_id": "local-user",
+                "title": "Roleplay",
+                "workspace_type": "playground",
+                "owner_type": "character",
+                "owner_id": "character-1",
+            }
+        )
+        opening = self.repository.create_opening_assistant_message(
+            playground["_id"], "local-user", "欢迎来到雨夜。"
+        )
+        updated = self.repository.update_message_metadata(
+            opening["_id"],
+            "local-user",
+            {
+                "state_snapshot": {"affection": 3},
+                "action_options": [{"text": "敲门"}],
+            },
+        )
+
+        rows = self.repository.list_workspace_conversations(
+            "local-user", "playground", "character", "character-1"
+        )
+        messages = self.repository.list_messages(playground["_id"], "local-user")
+
+        self.assertEqual([item["_id"] for item in rows], [playground["_id"]])
+        self.assertEqual(updated["metadata"]["state_snapshot"]["affection"], 3)
+        self.assertEqual(messages[0]["metadata"]["action_options"], [{"text": "敲门"}])
+        self.assertNotIn(self.thread["_id"], [item["_id"] for item in rows])
+
+    def test_branch_with_map_copies_workspace_ownership_and_metadata(self):
+        playground = self.repository.create_conversation(
+            {
+                "user_id": "local-user",
+                "title": "Roleplay",
+                "workspace_type": "playground",
+                "owner_type": "world",
+                "owner_id": "world-1",
+            }
+        )
+        opening = self.repository.create_opening_assistant_message(
+            playground["_id"], "local-user", "世界开始运转。"
+        )
+        self.repository.update_message_metadata(
+            opening["_id"], "local-user", {"state_snapshot": {"danger": 2}}
+        )
+
+        result = self.repository.create_branch_conversation_with_map(
+            playground["_id"], "local-user", opening["_id"]
+        )
+
+        self.assertIsNotNone(result)
+        branch, message_map = result
+        copied = self.repository.get_workspace_conversation(
+            branch["_id"], "local-user", "playground"
+        )
+        copied_opening = self.repository.get_path_to_message(
+            branch["_id"], "local-user", message_map[opening["_id"]]
+        )[-1]
+        self.assertEqual(copied["owner_type"], "world")
+        self.assertEqual(copied["owner_id"], "world-1")
+        self.assertEqual(copied_opening["metadata"]["state_snapshot"], {"danger": 2})
+
     def test_fastapi_startup_uses_the_configured_sqlite_database(self):
         from AgentBI.main import app, lifespan
         from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository

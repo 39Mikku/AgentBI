@@ -143,11 +143,11 @@ onBeforeUnmount(() => {
         />
         <HomeModuleEntry
           index="04"
-          title="Toolbox"
-          description="即开即用的本地小型工作台"
-          to="/toolbox"
-          accent="#b8a8ff"
-          variant="utility"
+          title="Playground"
+          description="角色、世界书与长篇叙事空间"
+          to="/playground"
+          accent="#d7ff3f"
+          variant="story"
         />
       </div>
     </section>
@@ -160,6 +160,7 @@ onBeforeUnmount(() => {
           <h2>控制面板</h2>
         </header>
         <nav aria-label="快捷设置">
+          <RouterLink to="/toolbox"><span>工具箱</span><small>LOCAL UTILITIES</small><b>↗</b></RouterLink>
           <RouterLink to="/settings/models"><span>模型工作台</span><small>MODEL ROUTES</small><b>↗</b></RouterLink>
           <RouterLink to="/assistants"><span>助手管理</span><small>ASSISTANTS</small><b>↗</b></RouterLink>
           <RouterLink to="/attachments"><span>附件管理</span><small>ASSETS</small><b>↗</b></RouterLink>

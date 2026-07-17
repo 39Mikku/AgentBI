@@ -5,7 +5,7 @@ defineProps<{
   description: string
   to: string
   accent: string
-  variant: 'hero' | 'signal' | 'paper' | 'utility'
+  variant: 'hero' | 'signal' | 'paper' | 'story' | 'utility'
 }>()
 </script>
 
@@ -28,6 +28,10 @@ defineProps<{
       </template>
       <template v-else-if="variant === 'paper'">
         <span v-for="n in 4" :key="n">0{{ n }}</span>
+      </template>
+      <template v-else-if="variant === 'story'">
+        <span class="story-frame"><i></i><b></b><em></em></span>
+        <span class="story-line line-a"></span><span class="story-line line-b"></span>
       </template>
       <template v-else>
         <i></i><i></i><i></i><i></i>
@@ -110,6 +114,18 @@ defineProps<{
 .module-entry--paper .entry-art span:last-child { border: 0; }
 .module-entry--paper:hover .entry-art span:nth-child(3) { background: #11110f; color: var(--entry-accent); }
 
+.module-entry--story { grid-column: span 2; background: #111512; }
+.module-entry--story .entry-art { overflow: hidden; border: 1px solid rgba(215,255,63,.22); background: linear-gradient(115deg,#202720,#111512 62%); }
+.story-frame { position: absolute; right: 12%; top: 10px; width: 64px; height: 64px; border: 1px solid rgba(215,255,63,.48); transform: rotate(45deg); }
+.story-frame i,.story-frame b,.story-frame em { position: absolute; display: block; border: 1px solid rgba(215,255,63,.26); inset: 8px; }
+.story-frame b { inset: 18px; background: var(--entry-accent); opacity: .68; }
+.story-frame em { inset: 27px; border: 0; background: #111512; }
+.story-line { position: absolute; left: 0; height: 1px; background: rgba(215,255,63,.32); transform-origin: left; transition: transform .45s; }
+.story-line.line-a { top: 28px; width: 48%; }
+.story-line.line-b { top: 58px; width: 61%; }
+.module-entry--story:hover .story-line { background: #11110f; transform: scaleX(1.45); }
+.module-entry--story:hover .story-frame { border-color: rgba(17,17,15,.5); }
+
 .module-entry--utility { grid-column: span 2; }
 .module-entry--utility .entry-art { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
 .module-entry--utility .entry-art i { border: 1px solid #595850; position: relative; }
@@ -118,7 +134,7 @@ defineProps<{
 .module-entry--utility:hover .entry-art i::after { background: #11110f; }
 
 @media (max-width: 820px) {
-  .module-entry--hero, .module-entry--utility { grid-column: auto; }
+  .module-entry--hero, .module-entry--story, .module-entry--utility { grid-column: auto; }
   .module-entry--hero .entry-copy h2 { font-size: clamp(50px, 15vw, 78px); }
 }
 @media (prefers-reduced-motion: reduce) {

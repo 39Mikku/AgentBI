@@ -13,9 +13,10 @@ function browserStorage(): WorkspaceRailStorage | undefined {
 
 export function readWorkspaceRailCollapsed(
   storage: WorkspaceRailStorage | undefined = browserStorage(),
+  storageKey = STORAGE_KEY,
 ): boolean {
   try {
-    return storage?.getItem(STORAGE_KEY) === 'true'
+    return storage?.getItem(storageKey) === 'true'
   } catch {
     return false
   }
@@ -23,13 +24,14 @@ export function readWorkspaceRailCollapsed(
 
 export function useWorkspaceRail(
   storage: WorkspaceRailStorage | undefined = browserStorage(),
+  storageKey = STORAGE_KEY,
 ): { railCollapsed: Ref<boolean>; toggleRail: () => void } {
-  const railCollapsed = ref(readWorkspaceRailCollapsed(storage))
+  const railCollapsed = ref(readWorkspaceRailCollapsed(storage, storageKey))
 
   function toggleRail() {
     railCollapsed.value = !railCollapsed.value
     try {
-      storage?.setItem(STORAGE_KEY, String(railCollapsed.value))
+      storage?.setItem(storageKey, String(railCollapsed.value))
     } catch {
       // The UI state remains usable when privacy settings block localStorage.
     }

@@ -28,8 +28,12 @@ from AgentBI.src.api.tests import router as tests_router
 from AgentBI.src.api.image_generation import router as image_generation_router
 from AgentBI.src.api.studio_assets import router as studio_asset_router
 from AgentBI.src.api.video_generation import router as video_generation_router
+from AgentBI.src.api.playground_profiles import router as playground_profiles_router
+from AgentBI.src.api.playground_conversations import router as playground_conversations_router
+from AgentBI.src.api.playground_chat import router as playground_chat_router
 from AgentBI.src.logging.logging import Logger
 from AgentBI.src.repositories.sqlite_chat_repository import SqliteChatRepository
+from AgentBI.src.repositories.sqlite_playground_repository import SqlitePlaygroundRepository
 from AgentBI.src.repositories.sqlite_test_repository import SqliteTestRepository
 from AgentBI.src.services.music_api_process import MusicApiProcessManager
 from AgentBI.src.services.test_model_service import TestModelService
@@ -57,6 +61,9 @@ async def lifespan(app: FastAPI):
     load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
     sqlite_path = os.getenv("CHAT_SQLITE_PATH") or str(Path(__file__).resolve().parent / "data" / "agentbi.sqlite3")
     app.state.chat_repository = SqliteChatRepository(sqlite_path)
+    app.state.playground_repository = SqlitePlaygroundRepository.from_connection_owner(
+        app.state.chat_repository
+    )
     app.state.test_repository = SqliteTestRepository(sqlite_path)
     app.state.test_model_service = TestModelService(
         app.state.test_repository, app.state.chat_repository
@@ -155,6 +162,9 @@ app.include_router(tests_router)
 app.include_router(image_generation_router)
 app.include_router(studio_asset_router)
 app.include_router(video_generation_router)
+app.include_router(playground_profiles_router)
+app.include_router(playground_conversations_router)
+app.include_router(playground_chat_router)
 
 
 @app.get("/")
