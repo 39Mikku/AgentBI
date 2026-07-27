@@ -14,7 +14,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    open: true,
+    open: false,
     proxy: {
       // 代理前端 /api 请求到 FastAPI 后端，剥离 /api 前缀，规避开发期 CORS
       '/api': {

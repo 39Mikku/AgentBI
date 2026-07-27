@@ -38,6 +38,6 @@ echo 按 Ctrl+C 可停止服务
 echo ============================================
 echo.
 
-call npm run dev
+call npm run dev -- --open
 
 pause

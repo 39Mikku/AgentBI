@@ -75,10 +75,20 @@ flowchart LR
 
 ## 本地运行
 
+推荐在 Windows 仓库根目录直接运行：
+
+```powershell
+.\start-agentbi.cmd
+```
+
+脚本会检查 Python、Node.js、`.env` 和本地依赖，缺失时完成初始化；随后分别打开后端与前端日志窗口。若 AgentBI 服务已经运行则直接复用，两个服务就绪后自动打开 `http://localhost:5173/`。关闭对应日志窗口即可停止前端或后端，后端托管的网易云音乐服务会随 FastAPI 一同退出。
+
+也可以按下面的方式分别手动启动：
+
 ```powershell
 # Backend · http://127.0.0.1:8000
 Copy-Item AgentBI/.env.example AgentBI/.env
-.\venv\python.exe -m AgentBI.main
+.\venv\python.exe -m uvicorn AgentBI.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir AgentBI
 
 # Frontend · http://localhost:5173
 Set-Location Agent-vue
