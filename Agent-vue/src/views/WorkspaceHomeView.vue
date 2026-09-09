@@ -1,23 +1,21 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import ProjectFooter from '@/components/brand/ProjectFooter.vue'
 import HomeModuleEntry from '@/components/home/HomeModuleEntry.vue'
 import HomeRecentConversations from '@/components/home/HomeRecentConversations.vue'
 import quotes from '@/content/home-quotes.json'
 import { initialQuoteIndex, nextQuoteIndex } from '@/home/home-quotes'
 import { formatHomeDate, greetingForHour } from '@/home/home-time'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 
-const auth = useAuthStore()
-const router = useRouter()
+const workspace = useWorkspaceStore()
 const now = ref(new Date())
 const quoteIndex = ref(initialQuoteIndex(quotes.length))
 let clockTimer: ReturnType<typeof setInterval> | undefined
 let quoteTimer: ReturnType<typeof setInterval> | undefined
 
 const username = computed(() =>
-  auth.profile?.username?.trim() || auth.email.split('@')[0] || '探索者',
+  workspace.profile?.username?.trim() || workspace.userId.split('@')[0] || '探索者',
 )
 const initials = computed(() => username.value.slice(0, 2).toUpperCase())
 const hour = computed(() => String(now.value.getHours()).padStart(2, '0'))
@@ -42,11 +40,6 @@ function onVisibilityChange() {
   else startQuoteRotation()
 }
 
-function logout() {
-  auth.logout()
-  router.replace('/')
-}
-
 onMounted(() => {
   clockTimer = setInterval(() => { now.value = new Date() }, 1_000)
   startQuoteRotation()
@@ -61,7 +54,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="authenticated-home">
+  <main class="workspace-home">
     <div class="home-grain" aria-hidden="true"></div>
     <header class="home-nav home-reveal" style="--delay: 0s">
       <RouterLink class="home-brand" to="/home" aria-label="AgentBI 主页">
@@ -72,13 +65,13 @@ onBeforeUnmount(() => {
       <div class="nav-date">{{ formatHomeDate(now) }}</div>
       <div class="user-area">
         <RouterLink class="user-chip" to="/chat" title="进入 Studio">
-          <span v-if="auth.profile?.avatar_data_url" class="user-avatar image">
-            <img :src="auth.profile.avatar_data_url" alt="" />
+          <span v-if="workspace.profile?.avatar_data_url" class="user-avatar image">
+            <img :src="workspace.profile.avatar_data_url" alt="" />
           </span>
           <span v-else class="user-avatar">{{ initials }}</span>
           <span>{{ username }}</span>
         </RouterLink>
-        <button class="logout-button" type="button" @click="logout">退出</button>
+        <a class="project-link" href="https://agentbi.39miku.tech/" target="_blank" rel="noreferrer">官网 ↗</a>
       </div>
     </header>
 
@@ -153,7 +146,7 @@ onBeforeUnmount(() => {
     </section>
 
     <section class="lower-grid home-reveal" style="--delay: .32s">
-      <HomeRecentConversations :user-id="auth.email" />
+      <HomeRecentConversations :user-id="workspace.userId" />
       <aside class="quick-panel">
         <header>
           <span>02 / QUICK ACCESS</span>
@@ -175,7 +168,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;1,600&display=swap');
-.authenticated-home {
+.workspace-home {
   --ink: #12120f;
   --paper: #e8e4da;
   --paper-deep: #d8d3c7;
@@ -200,8 +193,8 @@ onBeforeUnmount(() => {
 .user-avatar { display: grid; place-items: center; width: 30px; height: 30px; overflow: hidden; border: 1px solid var(--ink); background: var(--acid); font: 600 8px 'DM Mono', monospace; }
 .user-avatar.image { background: #d7d3c9; }
 .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.logout-button { border: 0; border-left: 1px solid #bbb6aa; background: transparent; padding: 4px 0 4px 13px; color: #77736b; cursor: pointer; font: 8px 'DM Mono', monospace; }
-.logout-button:hover { color: var(--ink); }
+.project-link { border: 0; border-left: 1px solid #bbb6aa; background: transparent; padding: 4px 0 4px 13px; color: #77736b; cursor: pointer; font: 8px 'DM Mono', monospace; }
+.project-link:hover { color: var(--ink); }
 
 .briefing-hero { min-height: 505px; display: grid; grid-template-columns: minmax(0,1.15fr) minmax(320px,.85fr); grid-template-rows: 1fr auto; column-gap: clamp(30px,6vw,100px); border-bottom: 1px solid #bbb6aa; padding: clamp(55px,8vw,108px) 0 42px; }
 .section-label, .section-heading span, .quick-panel header span { color: #767269; font: 500 8px 'DM Mono', monospace; letter-spacing: .17em; }
@@ -262,8 +255,8 @@ onBeforeUnmount(() => {
   .lower-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
-  .authenticated-home { padding-inline: 14px; }
-  .home-brand span,.user-chip > span:last-child,.logout-button { display: none; }
+  .workspace-home { padding-inline: 14px; }
+  .home-brand span,.user-chip > span:last-child,.project-link { display: none; }
   .briefing-hero { padding-top: 48px; }
   .hero-intro h1 { font-size: clamp(49px,17vw,74px); }
   .hero-clock > div { font-size: clamp(58px,23vw,95px); }

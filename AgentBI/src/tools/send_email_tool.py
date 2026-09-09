@@ -3,7 +3,7 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from langchain_core.tools import tool
 
 from AgentBI.src.schemas.email_schema import EmailSchema
@@ -13,7 +13,10 @@ ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 def load_smtp_environment() -> None:
     """Load the backend-local SMTP configuration even if the launcher exports empty values."""
-    load_dotenv(ENV_PATH, override=True)
+    values = dotenv_values(ENV_PATH)
+    for key in ("EMAIL_HOST", "EMAIL_FROM", "EMAIL_PASSWORD", "EMAIL_PORT"):
+        if values.get(key) is not None:
+            os.environ[key] = values[key]
 
 
 load_smtp_environment()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import * as settingsApi from '@/api/capability-settings'
 import type { CapabilitySettings } from '@/api/chat-types'
 import * as imageGenerationApi from '@/api/image-generation'
@@ -10,8 +10,8 @@ import type { CapabilitySettingField } from '@/api/chat-types'
 import { videoAspectRatioOptions, videoDurationOptions, videoResolutionOptions } from '@/utils/video-generation'
 
 const router = useRouter()
-const auth = useAuthStore()
-const userId = computed(() => auth.email || 'local-user')
+const workspace = useWorkspaceStore()
+const userId = computed(() => workspace.userId)
 const settings = ref<CapabilitySettings[]>([])
 const loading = ref(true)
 const saving = ref('')

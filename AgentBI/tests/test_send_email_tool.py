@@ -34,10 +34,12 @@ class SendEmailToolTests(unittest.TestCase):
     def test_local_env_loader_overrides_empty_inherited_values(self):
         from AgentBI.src.tools import send_email_tool
 
-        with patch.object(send_email_tool, "load_dotenv") as load_dotenv:
+        with patch.dict(os.environ, {"EMAIL_HOST": "", "NCM_ENABLED": "false"}), patch.object(
+            send_email_tool, "dotenv_values", return_value={"EMAIL_HOST": "smtp.example.com", "NCM_ENABLED": "true"}
+        ):
             send_email_tool.load_smtp_environment()
-
-        load_dotenv.assert_called_once_with(send_email_tool.ENV_PATH, override=True)
+            self.assertEqual(os.environ['EMAIL_HOST'], 'smtp.example.com')
+            self.assertEqual(os.environ['NCM_ENABLED'], 'false')
 
 
 if __name__ == "__main__":

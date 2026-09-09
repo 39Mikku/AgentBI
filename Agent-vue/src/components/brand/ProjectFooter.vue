@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { PROJECT_AUTHOR, PROJECT_LINKS } from '@/project/project-surfaces'
-import { useAuthStore } from '@/stores/auth'
 
 withDefaults(defineProps<{
   compact?: boolean
@@ -13,9 +11,8 @@ withDefaults(defineProps<{
   tone: 'paper',
 })
 
-const auth = useAuthStore()
-const workspaceLink = computed(() => auth.isAuthenticated ? '/home' : '/login')
-const workspaceLabel = computed(() => auth.isAuthenticated ? '返回工作空间' : '进入工作台')
+const workspaceLink = '/'
+const workspaceLabel = '返回工作台'
 </script>
 
 <template>
@@ -37,7 +34,7 @@ const workspaceLabel = computed(() => auth.isAuthenticated ? '返回工作空间
       </template>
     </nav>
 
-    <RouterLink v-if="compact" class="compact-about" to="/about">About</RouterLink>
+    <a v-if="compact" class="compact-about" href="https://agentbi.39miku.tech/" target="_blank" rel="noreferrer">官网 ↗</a>
 
     <div class="project-footer__status">
       <span><i></i> LOCAL FIRST · BUILD IN PROGRESS</span>

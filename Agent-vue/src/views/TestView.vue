@@ -5,16 +5,16 @@ import AppModeSwitcher from '@/components/AppModeSwitcher.vue'
 import BrandMark from '@/components/brand/BrandMark.vue'
 import WorkspaceRailToggle from '@/components/WorkspaceRailToggle.vue'
 import { useWorkspaceRail } from '@/composables/useWorkspaceRail'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import * as api from '@/api/tests'
 import * as providersApi from '@/api/providers'
 import type { ProviderProfile } from '@/api/chat-types'
 import type { AnswerSelection, AttemptDetail, TestMode, TestPreferences, TestSession, TestSummary } from '@/api/test-types'
 
-const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const router = useRouter()
 const { railCollapsed, toggleRail } = useWorkspaceRail()
-const userId = computed(() => auth.email || 'local-user')
+const userId = computed(() => workspace.userId)
 const history = ref<TestSummary[]>([])
 const session = ref<TestSession | null>(null)
 const attempt = ref<AttemptDetail | null>(null)
@@ -180,7 +180,7 @@ onMounted(async () => {
     </aside>
 
     <section class="canvas">
-      <header><div><span>EDITORIAL ASSESSMENT LAB</span><b>{{ auth.profile?.username || userId }}</b></div><div class="status"><i></i>{{ saving ? 'SAVING' : loading ? 'PROCESSING' : 'READY' }}</div></header>
+      <header><div><span>EDITORIAL ASSESSMENT LAB</span><b>{{ workspace.profile?.username || userId }}</b></div><div class="status"><i></i>{{ saving ? 'SAVING' : loading ? 'PROCESSING' : 'READY' }}</div></header>
       <div v-if="error" class="error">{{ error }} <button @click="error = ''">×</button></div>
 
       <section v-if="view === 'create'" class="create-sheet">

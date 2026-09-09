@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { usePlaygroundStore } from '@/stores/playground'
 import { useWorkspaceRail } from '@/composables/useWorkspaceRail'
 import { assetContentUrl } from '@/utils/chat-attachments'
@@ -14,10 +14,10 @@ import PlaygroundSidebar from '@/components/playground/PlaygroundSidebar.vue'
 import PlaygroundStatusPanel from '@/components/playground/PlaygroundStatusPanel.vue'
 
 
-const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const store = usePlaygroundStore()
 const router = useRouter()
-const userId = computed(() => auth.email || 'local-user')
+const userId = computed(() => workspace.userId)
 const { railCollapsed, toggleRail } = useWorkspaceRail(
   undefined,
   'agentbi.playground-rail-collapsed',

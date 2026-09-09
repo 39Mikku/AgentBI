@@ -5,11 +5,9 @@ import { RouterLink, useRoute } from 'vue-router'
 import BrandMark from '@/components/brand/BrandMark.vue'
 import ProjectFooter from '@/components/brand/ProjectFooter.vue'
 import { getNotFoundPrimaryAction } from '@/project/project-surfaces'
-import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
-const auth = useAuthStore()
-const primaryAction = computed(() => getNotFoundPrimaryAction(auth.isAuthenticated))
+const primaryAction = getNotFoundPrimaryAction()
 const attemptedPath = computed(() => route.fullPath)
 </script>
 

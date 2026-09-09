@@ -13,12 +13,12 @@ import type {
   TtsTrackResult,
   TtsVoiceInput,
 } from '@/api/toolbox-tts-types'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { applyGeneratedScript, availableVoices, generateTracks, releaseTrackResults } from '@/toolbox/voice-workbench'
 
 const router = useRouter()
-const auth = useAuthStore()
-const userId = computed(() => auth.email || 'local-user')
+const workspace = useWorkspaceStore()
+const userId = computed(() => workspace.userId)
 const providers = ref<TtsCapabilityProvider[]>([])
 const customVoices = ref<TtsCustomVoice[]>([])
 const tracks = ref<TtsTrackConfig[]>([])

@@ -52,6 +52,22 @@ class _FakeSyncStream:
 
 
 class MusicApiProcessManagerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sync_exit_is_polled_before_health_wait(self):
+        from AgentBI.src.services.music_api_process import MusicApiProcessManager
+
+        process = _FakeSyncProcess()
+        process.poll = lambda: 1
+        probes = []
+
+        async def probe(_):
+            probes.append(True)
+            return False
+
+        manager = MusicApiProcessManager(sync_process_factory=lambda *_, **__: process, health_probe=probe)
+        self.assertFalse(await manager.start())
+        self.assertEqual(probes, [])
+        self.assertFalse(process.terminated)
+
     async def test_sync_process_factory_does_not_require_asyncio_subprocess_support(self):
         from AgentBI.src.services.music_api_process import MusicApiProcessManager
 

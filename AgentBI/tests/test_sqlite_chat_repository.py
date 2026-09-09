@@ -55,19 +55,24 @@ class SqliteChatRepositoryTests(unittest.TestCase):
     def test_chat_preferences_default_to_medium_thinking(self):
         self.assertEqual(self.repository.get_preferences("new-user")["thinking_level"], "medium")
 
-    def test_local_user_profile_and_login_code_are_persisted_without_mongo(self):
+    def test_manual_default_model_is_selectable_before_refresh(self):
+        provider = self.repository.create_provider({
+            'name': 'Manual', 'base_url': 'https://example.test/v1',
+            'api_key': 'key', 'default_model': 'manual-model',
+        })
+        self.assertEqual(provider['available_models'], ['manual-model'])
+        refreshed = self.repository.update_provider(provider['_id'], {'available_models': ['another-model']})
+        self.assertEqual(refreshed['available_models'], ['manual-model', 'another-model'])
+
+    def test_local_user_profile_is_persisted(self):
         user = self.repository.create_user("elysi@example.com")
         updated = self.repository.update_user(user["user_id"], {"username": "elysi", "avatar_data_url": "data:image/png;base64,AA=="})
-        self.repository.create_login_code("elysi", "123456", user["email"])
 
-        consumed = self.repository.consume_login_code("elysi", "123456")
 
         self.assertEqual(updated["username"], "elysi")
         self.assertEqual(self.repository.find_user("elysi")["avatar_data_url"], "data:image/png;base64,AA==")
         self.assertEqual(self.repository.update_user(user["user_id"], {"username": "elysi-renamed"})["username"], "elysi-renamed")
         self.assertEqual(self.repository.find_user("elysi-renamed")["email"], "elysi@example.com")
-        self.assertEqual(consumed["target_email"], "elysi@example.com")
-        self.assertIsNone(self.repository.consume_login_code("elysi", "123456"))
 
     def test_edit_and_retry_create_selectable_message_versions(self):
         user = self.repository.create_user_message(self.thread["_id"], "local-user", "Original")

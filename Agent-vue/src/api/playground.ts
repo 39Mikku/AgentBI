@@ -25,7 +25,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
       (await response.json().catch(() => null))?.detail || `请求失败 (${response.status})`,
     )
   }
-  return response.json() as Promise<T>
+  return response.status === 204 ? undefined as T : response.json() as Promise<T>
 }
 
 function jsonInit(method: string, body: unknown): RequestInit {
@@ -123,7 +123,7 @@ export const updatePlaygroundProfile = (
   )
 
 export const deletePlaygroundProfile = (profileId: string, userId: string) =>
-  fetch(`${BASE}/profiles/${profileId}?user_id=${encodeURIComponent(userId)}`, {
+  json<void>(`/profiles/${profileId}?user_id=${encodeURIComponent(userId)}`, {
     method: 'DELETE',
   })
 
@@ -239,7 +239,7 @@ export const updatePlaygroundConversation = (
   )
 
 export const deletePlaygroundConversation = (conversationId: string, userId: string) =>
-  fetch(`${BASE}/conversations/${conversationId}?user_id=${encodeURIComponent(userId)}`, {
+  json<void>(`/conversations/${conversationId}?user_id=${encodeURIComponent(userId)}`, {
     method: 'DELETE',
   })
 

@@ -6,7 +6,7 @@ import { generateImage } from '@/api/image-generation'
 import type { GeneratedImage } from '@/api/image-generation-types'
 import { uploadAsset } from '@/api/studio-assets'
 import { nameStickers } from '@/api/toolbox-emoji'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { useChatStore } from '@/stores/chat'
 import {
   buildStickerPrompt,
@@ -21,9 +21,9 @@ import { assetContentUrl } from '@/utils/chat-attachments'
 import { fileToDataUrl, formatBytes, prepareImageFile } from '@/utils/image-source'
 
 const router = useRouter()
-const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const chat = useChatStore()
-const userId = computed(() => auth.email || 'local-user')
+const userId = computed(() => workspace.userId)
 
 const styles = [
   { id: 'kawaii', mark: 'KA', name: '软萌漫画', note: 'ROUND / POP', prompt: '软萌日系漫画贴纸，圆润线条，高饱和配色，夸张可爱的表情' },

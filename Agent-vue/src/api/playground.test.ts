@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  deletePlaygroundProfile,
+  deletePlaygroundConversation,
   getPlaygroundPreferences,
   listPlaygroundConversations,
   savePlaygroundPreferences,
@@ -9,6 +11,14 @@ import {
 
 describe('playground api', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('rejects failed deletes and accepts empty successful deletes', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: '删除失败' }), { status: 500 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 })))
+    await expect(deletePlaygroundProfile('p', 'u')).rejects.toThrow('删除失败')
+    await expect(deletePlaygroundConversation('c', 'u')).resolves.toBeUndefined()
+  })
 
   it('keeps preferences separate and scopes conversation queries by profile', async () => {
     const fetchMock = vi

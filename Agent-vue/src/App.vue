@@ -4,6 +4,11 @@ import { RouterView } from 'vue-router'
 
 import BrandRouteLoader from '@/components/brand/BrandRouteLoader.vue'
 import router from '@/router'
+import WorkspaceSetup from '@/components/WorkspaceSetup.vue'
+import { useWorkspaceStore } from '@/stores/workspace'
+
+const workspace = useWorkspaceStore()
+onMounted(() => workspace.initialize())
 
 const routeBusy = ref(true)
 let settleTimer: ReturnType<typeof setTimeout> | undefined
@@ -32,7 +37,8 @@ onBeforeUnmount(() => {
   <Transition name="brand-loader-fade">
     <BrandRouteLoader v-if="routeBusy" />
   </Transition>
-  <RouterView v-slot="{ Component }">
+  <WorkspaceSetup v-if="!workspace.ready" />
+  <RouterView v-else v-slot="{ Component }">
     <Transition name="route" mode="out-in">
       <component :is="Component" />
     </Transition>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import * as providers from '@/api/providers'
 import * as modelRoutesApi from '@/api/model-routes'
 import * as modelCapabilitiesApi from '@/api/model-capabilities'
@@ -16,9 +16,9 @@ import {
 import { loadSettingsResources } from '@/utils/settings-load'
 
 const router = useRouter()
-const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const chat = useChatStore()
-const userId = computed(() => auth.email || 'local-user')
+const userId = computed(() => workspace.userId)
 const profiles = ref<ProviderProfile[]>([])
 const busy = ref('')
 const error = ref('')

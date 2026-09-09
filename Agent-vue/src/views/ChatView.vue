@@ -12,7 +12,7 @@ import AttachmentComposer from '@/components/chat/AttachmentComposer.vue'
 import MessageAssets from '@/components/chat/MessageAssets.vue'
 import ImageSourcePicker from '@/components/ImageSourcePicker.vue'
 import { getUserProfile, saveUserAvatar } from '@/api/user-profile'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { useChatStore } from '@/stores/chat'
 import { usePlayerStore } from '@/stores/player'
 import { renderMarkdown } from '@/utils/markdown'
@@ -27,7 +27,7 @@ import type { BilibiliVideo } from '@/utils/bilibili-player'
 
 const router = useRouter()
 const route = useRoute()
-const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const chat = useChatStore()
 const player = usePlayerStore()
 const input = ref('')
@@ -40,7 +40,7 @@ const assistantMenuOpen = ref(false)
 const profileOpen = ref(false)
 const profileBusy = ref(false)
 const profileError = ref('')
-const profile = computed(() => auth.profile)
+const profile = computed(() => workspace.profile)
 const editingId = ref('')
 const editingTitle = ref('')
 const editingMessageId = ref('')
@@ -48,7 +48,7 @@ const editingMessageContent = ref('')
 const timeline = ref<HTMLElement | null>(null)
 const previewTurn = ref(-1)
 const activeBilibiliVideo = ref<BilibiliVideo | null>(null)
-const userId = computed(() => auth.email || 'local-user')
+const userId = computed(() => workspace.userId)
 const modelLabel = computed(() => chat.preferences.model || '选择模型')
 const thinkingLevels = computed(() => reasoningChoices(chat.preferences.model))
 const showThinkingControl = computed(() => thinkingLevels.value.length > 0)
@@ -240,8 +240,7 @@ function switchAssistant(id: string) {
   assistantMenuOpen.value = false
   void chat.selectAssistant(id, userId.value)
 }
-function logout() {
-  auth.logout()
+function returnHome() {
   void router.push('/')
 }
 function beginRename(id: string, title: string) {
@@ -260,7 +259,7 @@ async function commitRename(id: string) {
 async function loadProfile() {
   if (!shouldRefreshUserProfile(profile.value, userId.value)) return
   try {
-    auth.setProfile(await getUserProfile(userId.value))
+    workspace.setProfile(await getUserProfile(userId.value))
   } catch (error) {
     profileError.value = error instanceof Error ? error.message : '无法读取用户资料'
   }
@@ -270,7 +269,7 @@ async function saveProfileAvatar(dataUrl: string | null) {
   profileBusy.value = true
   profileError.value = ''
   try {
-    auth.setProfile(await saveUserAvatar(userId.value, dataUrl))
+    workspace.setProfile(await saveUserAvatar(userId.value, dataUrl))
   } catch (error) {
     profileError.value = error instanceof Error ? error.message : '头像保存失败'
   } finally {
@@ -384,7 +383,7 @@ onMounted(async () => {
         <button title="模型工作室" @click="router.push('/settings/models')"><span class="footer-icon">◈</span><span class="footer-label">模型工作室</span></button>
         <button title="附件库" @click="router.push('/attachments')"><span class="footer-icon">▧</span><span class="footer-label">附件库</span></button>
         <button title="工具箱" @click="router.push('/toolbox')"><span class="footer-icon">⌘</span><span class="footer-label">工具箱</span></button>
-        <button title="退出会话" @click="logout"><span class="footer-icon">↗</span><span class="footer-label">退出会话</span></button>
+        <button title="返回主页" @click="returnHome"><span class="footer-icon">↗</span><span class="footer-label">返回主页</span></button>
       </div>
     </aside>
 

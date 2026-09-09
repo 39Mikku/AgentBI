@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -116,9 +116,8 @@ class SqliteChatRepository:
                     avatar_data_url TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS users_username_nocase ON users(username COLLATE NOCASE);
-                CREATE TABLE IF NOT EXISTS login_codes (
-                    identity TEXT PRIMARY KEY, code TEXT NOT NULL, target_email TEXT NOT NULL,
-                    expires_at TEXT NOT NULL, created_at TEXT NOT NULL
+                CREATE TABLE IF NOT EXISTS local_workspace (
+                    id INTEGER PRIMARY KEY CHECK(id = 1), user_id TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS assistants (
                     id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, system_prompt TEXT NOT NULL,
@@ -321,6 +320,8 @@ class SqliteChatRepository:
         item = dict(row)
         item["_id"] = item.pop("id")
         item["available_models"] = self._json_load(item.pop("available_models"), [])
+        if item.get("default_model") and item["default_model"] not in item["available_models"]:
+            item["available_models"].insert(0, item["default_model"])
         item["created_at"] = self._parse_time(item["created_at"])
         item["updated_at"] = self._parse_time(item["updated_at"])
         return item
@@ -1180,7 +1181,7 @@ class SqliteChatRepository:
 
     def find_user(self, identity: str) -> dict[str, Any] | None:
         with self._lock:
-            row = self._one("SELECT * FROM users WHERE email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE", (identity.strip(), identity.strip()))
+            row = self._one("SELECT * FROM users WHERE user_id = ? OR email = ? COLLATE NOCASE OR username = ? COLLATE NOCASE", (identity.strip(), identity.strip(), identity.strip()))
         return self._user_document(row)
 
     def create_user(self, email: str, username: str | None = None) -> dict[str, Any]:
@@ -1210,25 +1211,30 @@ class SqliteChatRepository:
             self._connection.execute(f"UPDATE users SET {', '.join(assignments)}, updated_at = ? WHERE user_id = ?", tuple(params))
         return self.find_user(user_id)
 
-    def create_login_code(self, identity: str, code: str, target_email: str, expires_seconds: int = 300) -> None:
-        now = utc_now()
+    def bootstrap_workspace(self, user_id: str | None = None) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        """Keep legacy IDs intact; persist a single local workspace selection."""
         with self._lock, self._connection:
-            self._connection.execute(
-                """INSERT INTO login_codes(identity, code, target_email, expires_at, created_at) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(identity) DO UPDATE SET code=excluded.code, target_email=excluded.target_email,
-                expires_at=excluded.expires_at, created_at=excluded.created_at""",
-                (identity.strip(), code, target_email, self._time(now + timedelta(seconds=expires_seconds)), self._time(now)),
-            )
-
-    def consume_login_code(self, identity: str, code: str) -> dict[str, str] | None:
-        now = self._time()
-        with self._lock, self._connection:
-            self._connection.execute("DELETE FROM login_codes WHERE expires_at <= ?", (now,))
-            row = self._one("SELECT identity, target_email FROM login_codes WHERE identity = ? AND code = ?", (identity.strip(), code.strip()))
-            if not row:
-                return None
-            self._connection.execute("DELETE FROM login_codes WHERE identity = ?", (identity.strip(),))
-        return dict(row)
+            users = [dict(row) for row in self._connection.execute("SELECT * FROM users ORDER BY created_at, user_id")]
+            if user_id is not None and not any(user["user_id"] == user_id for user in users):
+                raise KeyError(user_id)
+            if not users:
+                now = self._time()
+                self._connection.execute(
+                    "INSERT INTO users VALUES (?, ?, ?, NULL, ?, ?)",
+                    ("local-user", "本地用户", "", now, now),
+                )
+                users = [dict(self._one("SELECT * FROM users WHERE user_id = ?", ("local-user",)))]
+            saved = self._one("SELECT user_id FROM local_workspace WHERE id = 1")
+            selected_id = user_id or (saved["user_id"] if saved else None)
+            selected = next((user for user in users if user["user_id"] == selected_id), None)
+            if selected is None and len(users) == 1:
+                selected = users[0]
+            if selected:
+                self._connection.execute(
+                    "INSERT INTO local_workspace(id, user_id) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id",
+                    (selected["user_id"],),
+                )
+            return selected, users
 
     def get_user_profile(self, user_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
         user = self.find_user(user_id)

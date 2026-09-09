@@ -56,6 +56,11 @@ class MusicApiProcessManager:
     def _default_working_directory() -> Path:
         return Path(__file__).resolve().parents[2] / "vendor" / "netease-music-api"
 
+    @staticmethod
+    def _returncode(process: Any) -> int | None:
+        poll = getattr(process, "poll", None)
+        return poll() if callable(poll) else process.returncode
+
     async def _default_health_probe(self, base_url: str) -> bool:
         try:
             async with httpx.AsyncClient(timeout=1.5) as client:
@@ -68,14 +73,14 @@ class MusicApiProcessManager:
         if not self.enabled:
             self.available = False
             return False
-        if self._process is not None and self._process.returncode is None:
+        if self._process is not None and self._returncode(self._process) is None:
             self.available = await self._health_probe(self.base_url)
             return self.available
 
         await self._spawn()
         deadline = time.monotonic() + self.startup_timeout
         while time.monotonic() <= deadline:
-            if self._process.returncode is not None:
+            if self._returncode(self._process) is not None:
                 break
             if await self._health_probe(self.base_url):
                 self.available = True
@@ -91,7 +96,7 @@ class MusicApiProcessManager:
     async def ensure_running(self) -> bool:
         if not self.enabled:
             return False
-        if self._process is not None and self._process.returncode is None:
+        if self._process is not None and self._returncode(self._process) is None:
             self.available = await self._health_probe(self.base_url)
             return self.available
         if self._restart_consumed:
@@ -134,7 +139,7 @@ class MusicApiProcessManager:
     async def _stop_process(self) -> None:
         process = self._process
         self._process = None
-        if process is not None and process.returncode is None:
+        if process is not None and self._returncode(process) is None:
             process.terminate()
             try:
                 await asyncio.wait_for(self._wait_process(process), timeout=3)

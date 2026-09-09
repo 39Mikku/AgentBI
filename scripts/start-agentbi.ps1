@@ -1,6 +1,10 @@
 ﻿[CmdletBinding()]
 param(
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$SetupOnly,
+    [switch]$Hidden,
+    [ValidateRange(1, 65535)][int]$BackendPort = 8000,
+    [ValidateRange(1, 65535)][int]$FrontendPort = 5173
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,8 +14,9 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RepoRoot "AgentBI"
 $FrontendDir = Join-Path $RepoRoot "Agent-vue"
 $VenvDir = Join-Path $RepoRoot "venv"
-$BackendUrl = "http://127.0.0.1:8000/"
-$FrontendUrl = "http://localhost:5173/"
+if (Test-Path -LiteralPath (Join-Path $RepoRoot ".venv")) { $VenvDir = Join-Path $RepoRoot ".venv" }
+$BackendUrl = "http://127.0.0.1:$BackendPort/"
+$FrontendUrl = "http://localhost:$FrontendPort/"
 
 function Write-Status {
     param(
@@ -57,27 +62,16 @@ function Test-PortListening {
 }
 
 function Invoke-HealthProbe {
-    param(
-        [string]$Uri,
-        [string]$ExpectedContent
-    )
-
+    param([string]$Uri)
     try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec 2
-        return $response.StatusCode -eq 200 -and $response.Content -match $ExpectedContent
+        $response = Invoke-RestMethod -Uri $Uri -TimeoutSec 2
+        return $response.instance -and ([IO.Path]::GetFullPath($response.instance).TrimEnd('\', '/') -eq $RepoRoot.TrimEnd('\', '/'))
     }
-    catch {
-        return $false
-    }
+    catch { return $false }
 }
 
-function Test-AgentBIBackend {
-    return (Invoke-HealthProbe -Uri $BackendUrl -ExpectedContent "AgentBI")
-}
-
-function Test-AgentBIFrontend {
-    return (Invoke-HealthProbe -Uri $FrontendUrl -ExpectedContent "AgentBI")
-}
+function Test-AgentBIBackend { return (Invoke-HealthProbe -Uri $BackendUrl) }
+function Test-AgentBIFrontend { return (Invoke-HealthProbe -Uri ($FrontendUrl + "__agentbi")) }
 
 function Wait-ServiceReady {
     param(
@@ -143,41 +137,67 @@ function Install-BackendEnvironment {
         $created = $true
     }
 
-    & $python -c "import fastapi, uvicorn, dotenv" *> $null
-    $dependenciesReady = $LASTEXITCODE -eq 0
-    if ($created -or -not $dependenciesReady) {
-        Write-Status "正在安装后端依赖..." Yellow
-        & $python -m pip install -r (Join-Path $BackendDir "requirements.txt")
-        if ($LASTEXITCODE -ne 0) {
-            Stop-WithError "后端依赖安装失败，请检查网络或 requirements.txt。"
+    & $python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
+    if ($LASTEXITCODE -ne 0) { Stop-WithError "需要 Python 3.11+，推荐使用已验证的 Python 3.13。" }
+    $requirements = Join-Path $BackendDir "requirements-lock.txt"
+    $manifest = Join-Path $BackendDir "requirements.txt"
+    $stamp = Join-Path $VenvDir ".agentbi-requirements.sha256"
+    $hash = (Get-FileHash $requirements).Hash + (Get-FileHash $manifest).Hash
+    # Windows PowerShell 5.1 turns native stderr into errors even when redirected.
+    $ErrorActionPreference = "Continue"
+    try {
+        & $python -c "import tzdata, fastapi, uvicorn, pydantic, openai, langchain, langchain_openai, httpx, bs4, html2text, docx, python_multipart, dotenv, websockets" *> $null
+        $dependenciesReady = $LASTEXITCODE -eq 0
+        if ($dependenciesReady) {
+            & $python -m pip check *> $null
+            $dependenciesReady = $LASTEXITCODE -eq 0
         }
+    }
+    finally { $ErrorActionPreference = "Stop" }
+    $unchanged = (Test-Path -LiteralPath $stamp) -and ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $hash)
+    if ($created -or -not $dependenciesReady -or -not $unchanged) {
+        Write-Status "正在同步后端锁定依赖..." Yellow
+        & $python -m pip install -r $requirements -r $manifest | Out-Host
+        if ($LASTEXITCODE -ne 0) { Stop-WithError "后端依赖安装失败，请查看上方输出。" }
+        Set-Content -LiteralPath $stamp -Value $hash -Encoding ASCII
     }
 
     return $python
 }
 
-function Install-FrontendEnvironment {
-    if (-not (Test-CommandAvailable "node")) {
-        Stop-WithError "未检测到 Node.js，请先安装 Node.js 22+ 后重试。"
-    }
-    if (-not (Test-CommandAvailable "npm.cmd")) {
-        Stop-WithError "未检测到 npm，请检查 Node.js 安装。"
-    }
-
-    $nodeModules = Join-Path $FrontendDir "node_modules"
-    if (-not (Test-Path -LiteralPath $nodeModules -PathType Container)) {
-        Write-Status "未检测到前端依赖，正在执行 npm ci..." Yellow
-        Push-Location $FrontendDir
-        try {
-            & npm.cmd ci --no-fund --no-audit
-            if ($LASTEXITCODE -ne 0) {
-                Stop-WithError "前端依赖安装失败，请检查网络或 package-lock.json。"
+function Install-NodeDependencies {
+    param([string]$Directory)
+    $lock = Join-Path $Directory "package-lock.json"
+    $hash = (Get-FileHash $lock).Hash + (Get-FileHash (Join-Path $Directory "package.json")).Hash
+    $stamp = Join-Path $Directory "node_modules\.agentbi-lock.sha256"
+    $ready = (Test-Path -LiteralPath $stamp) -and ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $hash)
+    Push-Location $Directory
+    try {
+        if ($ready) {
+            $ErrorActionPreference = "Continue"
+            try {
+                & npm.cmd ls --depth=0 *> $null
+                $ready = $LASTEXITCODE -eq 0
             }
+            finally { $ErrorActionPreference = "Stop" }
         }
-        finally {
-            Pop-Location
+        if (-not $ready) {
+            Write-Status "正在同步 Node 依赖：$Directory" Yellow
+            & npm.cmd ci --no-fund --no-audit | Out-Host
+            if ($LASTEXITCODE -ne 0) { Stop-WithError "Node 依赖安装失败：$Directory" }
+            Set-Content -LiteralPath $stamp -Value $hash -Encoding ASCII
         }
     }
+    finally { Pop-Location }
+}
+
+function Install-FrontendEnvironment {
+    if (-not (Test-CommandAvailable "node") -or -not (Test-CommandAvailable "npm.cmd")) {
+        Stop-WithError "需要 Node.js 22.18+（22.x）或 24.12+，以及 npm。"
+    }
+    & node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit((a===22&&b>=18)||(a===24&&b>=12)||a>24?0:1)"
+    if ($LASTEXITCODE -ne 0) { Stop-WithError "Node 版本需要满足 ^22.18.0 或 >=24.12.0。" }
+    Install-NodeDependencies -Directory $FrontendDir
 }
 
 function Start-ServiceWindow {
@@ -188,10 +208,15 @@ function Start-ServiceWindow {
     )
 
     $command = 'title {0} && cd /d "{1}" && {2}' -f $Title, $WorkingDirectory, $Invocation
-    Start-Process -FilePath $env:ComSpec `
-        -ArgumentList @("/d", "/k", $command) `
-        -WorkingDirectory $WorkingDirectory `
-        -WindowStyle Normal | Out-Null
+    if ($Hidden) {
+        $logDir = Join-Path $BackendDir "logs"
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+        $process = Start-Process -FilePath $env:ComSpec -ArgumentList @("/d", "/c", $command) -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logDir "$Title.stdout.log") -RedirectStandardError (Join-Path $logDir "$Title.stderr.log")
+        Write-Status ("后台进程 PID {0}，日志：{1}" -f $process.Id, $logDir)
+    }
+    else {
+        Start-Process -FilePath $env:ComSpec -ArgumentList @("/d", "/k", $command) -WorkingDirectory $WorkingDirectory -WindowStyle Normal | Out-Null
+    }
 }
 
 function Test-ListeningServiceWithGrace {
@@ -237,21 +262,30 @@ try {
 
     $venvPython = Install-BackendEnvironment
     Install-FrontendEnvironment
+    $musicEnabled = & $venvPython -c "from dotenv import dotenv_values; import os, sys; c=dotenv_values(sys.argv[1]); print(os.environ.get('NCM_ENABLED', c.get('NCM_ENABLED', 'true')).strip().lower())" $envPath
+    if ($musicEnabled -notin @("false", "0", "no", "off")) {
+        Install-NodeDependencies -Directory (Join-Path $BackendDir "vendor\netease-music-api")
+    }
+    if ($SetupOnly) {
+        Write-Status "依赖初始化完成。" Green
+        exit 0
+    }
+    $env:AGENTBI_BACKEND_URL = $BackendUrl.TrimEnd('/')
 
     $backendHealthy = Test-AgentBIBackend
     if ($backendHealthy) {
-        Write-Status "后端已运行，直接复用 http://127.0.0.1:8000" Green
+        Write-Status "后端已运行，直接复用 $BackendUrl" Green
     }
-    elseif (Test-PortListening -Port 8000) {
-        $backendHealthy = Test-ListeningServiceWithGrace -Port 8000 -Probe ${function:Test-AgentBIBackend}
+    elseif (Test-PortListening -Port $BackendPort) {
+        $backendHealthy = Test-ListeningServiceWithGrace -Port $BackendPort -Probe ${function:Test-AgentBIBackend}
         if (-not $backendHealthy) {
-            Stop-WithError "端口 8000 已被非 AgentBI 服务占用，未启动或终止该进程。"
+            Stop-WithError "端口 $BackendPort 已被非 AgentBI 服务占用，未启动或终止该进程。"
         }
         Write-Status "后端正在启动，已识别并复用。" Green
     }
     else {
-        Write-Status "正在打开后端日志窗口..." Cyan
-        $backendInvocation = '"{0}" -m uvicorn AgentBI.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir AgentBI' -f $venvPython
+        Write-Status "正在启动后端..." Cyan
+        $backendInvocation = '"{0}" -m uvicorn AgentBI.main:app --host 127.0.0.1 --port {1} --reload --reload-dir AgentBI' -f $venvPython, $BackendPort
         Start-ServiceWindow `
             -Title "AgentBI Backend" `
             -WorkingDirectory $RepoRoot `
@@ -260,21 +294,21 @@ try {
 
     $frontendHealthy = Test-AgentBIFrontend
     if ($frontendHealthy) {
-        Write-Status "前端已运行，直接复用 http://localhost:5173" Green
+        Write-Status "前端已运行，直接复用 $FrontendUrl" Green
     }
-    elseif (Test-PortListening -Port 5173) {
-        $frontendHealthy = Test-ListeningServiceWithGrace -Port 5173 -Probe ${function:Test-AgentBIFrontend}
+    elseif (Test-PortListening -Port $FrontendPort) {
+        $frontendHealthy = Test-ListeningServiceWithGrace -Port $FrontendPort -Probe ${function:Test-AgentBIFrontend}
         if (-not $frontendHealthy) {
-            Stop-WithError "端口 5173 已被非 AgentBI 服务占用，未启动或终止该进程。"
+            Stop-WithError "端口 $FrontendPort 已被非 AgentBI 服务占用，未启动或终止该进程。"
         }
         Write-Status "前端正在启动，已识别并复用。" Green
     }
     else {
-        Write-Status "正在打开前端日志窗口..." Cyan
+        Write-Status "正在启动前端..." Cyan
         Start-ServiceWindow `
             -Title "AgentBI Frontend" `
             -WorkingDirectory $FrontendDir `
-            -Invocation "call npm.cmd run dev"
+            -Invocation "call npm.cmd run dev -- --port $FrontendPort"
     }
 
     Wait-ServiceReady -Probe ${function:Test-AgentBIBackend} -Name "后端"

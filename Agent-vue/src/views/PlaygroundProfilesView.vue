@@ -3,18 +3,18 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { assetContentUrl } from '@/utils/chat-attachments'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { usePlaygroundStore } from '@/stores/playground'
 import type { PlaygroundPreferences, PlaygroundProfile, PlaygroundProfileType } from '@/api/playground-types'
 import PlaygroundModelSettings from '@/components/playground/PlaygroundModelSettings.vue'
 import PlaygroundProfileEditor from '@/components/playground/PlaygroundProfileEditor.vue'
 
 
-const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const store = usePlaygroundStore()
 const route = useRoute()
 const router = useRouter()
-const userId = computed(() => auth.email || 'local-user')
+const userId = computed(() => workspace.userId)
 const tab = ref<'profiles' | 'model'>('profiles')
 const selectedId = ref('')
 const newType = ref<PlaygroundProfileType>('character')

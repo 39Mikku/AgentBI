@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-from AgentBI.src.api.api import router
+from AgentBI.src.api.workspace import router
 from AgentBI.src.api.chat import router as chat_router
 from AgentBI.src.api.conversations import router as conversation_router
 from AgentBI.src.api.providers import router as provider_router
@@ -169,7 +169,7 @@ app.include_router(playground_chat_router)
 
 @app.get("/")
 def read_root():
-    return {"status": "success", "message": "AgentBI 服务已启动，请访问 /docs。"}
+    return {"status": "success", "message": "AgentBI 服务已启动，请访问 /docs。", "instance": str(Path(__file__).resolve().parent.parent)}
 
 
 if __name__ == "__main__":

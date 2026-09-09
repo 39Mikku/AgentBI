@@ -3,12 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { deleteAsset, listAssets } from '@/api/studio-assets'
 import type { StudioAsset } from '@/api/chat-types'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { assetContentUrl, formatAssetSize } from '@/utils/chat-attachments'
 
 const router = useRouter()
-const auth = useAuthStore()
-const userId = computed(() => auth.email || 'local-user')
+const workspace = useWorkspaceStore()
+const userId = computed(() => workspace.userId)
 const assets = ref<StudioAsset[]>([])
 const filter = ref<'all' | 'generated' | 'video' | 'uploaded' | 'docx'>('all')
 const search = ref('')

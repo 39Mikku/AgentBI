@@ -2,15 +2,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import * as api from '@/api/assistants'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import type { AssistantProfile } from '@/api/chat-types'
 import { getPreferences } from '@/api/chat'
 import ImageSourcePicker from '@/components/ImageSourcePicker.vue'
 import BrandMark from '@/components/brand/BrandMark.vue'
 
 const router = useRouter()
-const auth = useAuthStore()
-const userId = computed(() => auth.email || 'local-user')
+const workspace = useWorkspaceStore()
+const userId = computed(() => workspace.userId)
 const assistants = ref<AssistantProfile[]>([])
 const selectedId = ref('')
 const busy = ref(false)

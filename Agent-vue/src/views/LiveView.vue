@@ -17,16 +17,16 @@ import {
   historyTurnsToSlider,
 } from '@/live/history-context'
 import { isLiveVoiceCompatible, roleInitials, voiceLabel } from '@/live/role-presentation'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { useLiveStore } from '@/stores/live'
 import { availableLiveVoices } from '@/toolbox/voice-workbench'
 import { useWorkspaceRail } from '@/composables/useWorkspaceRail'
 
-const auth = useAuthStore()
+const workspace = useWorkspaceStore()
 const live = useLiveStore()
 const router = useRouter()
-const userId = computed(() => auth.email || 'local-user')
-const userName = computed(() => auth.profile?.username || userId.value.split('@')[0] || userId.value)
+const userId = computed(() => workspace.userId)
+const userName = computed(() => workspace.profile?.username || userId.value.split('@')[0] || userId.value)
 const userInitials = computed(() => roleInitials(userName.value))
 const modelTier = computed(() => live.preferences.model.endsWith('plus') ? 'PLUS' : 'FLASH')
 const phaseCode = computed(() => live.state.phase.toUpperCase().padEnd(10, '·'))
@@ -280,7 +280,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="rail-profile">
-        <span class="user-avatar"><img v-if="auth.profile?.avatar_data_url" :src="auth.profile.avatar_data_url" alt="" /><i v-else>{{ userInitials }}</i></span>
+        <span class="user-avatar"><img v-if="workspace.profile?.avatar_data_url" :src="workspace.profile.avatar_data_url" alt="" /><i v-else>{{ userInitials }}</i></span>
         <span><strong>{{ userName }}</strong><small>{{ userId }}</small></span>
         <button @click="openSettings('call')">⌘</button>
       </div>

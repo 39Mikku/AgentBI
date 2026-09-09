@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getVideoGenerationJob, type VideoGenerationJob, type VideoGenerationStatus } from '@/api/video-generation'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { assetContentUrl } from '@/utils/chat-attachments'
 import { normalizeVideoProgress, videoPollDelay } from '@/utils/video-generation'
 
@@ -16,8 +16,8 @@ const props = defineProps<{
   model?: string
 }>()
 
-const auth = useAuthStore()
-const userId = computed(() => auth.email || 'local-user')
+const workspace = useWorkspaceStore()
+const userId = computed(() => workspace.userId)
 const job = ref<VideoGenerationJob | null>(null)
 const requestError = ref('')
 let timer: number | null = null

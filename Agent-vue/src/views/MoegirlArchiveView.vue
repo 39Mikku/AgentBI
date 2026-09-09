@@ -15,7 +15,7 @@ import type {
   MoegirlArtifactSummary,
   MoegirlFetchResult,
 } from '@/api/toolbox-moegirl-types'
-import { useAuthStore } from '@/stores/auth'
+import { useWorkspaceStore } from '@/stores/workspace'
 import {
   acceptArchiveResponse,
   applyFetchResult,
@@ -45,8 +45,8 @@ interface StateRequest {
 }
 
 const router = useRouter()
-const auth = useAuthStore()
-const userId = computed(() => auth.email || 'local-user')
+const workspace = useWorkspaceStore()
+const userId = computed(() => workspace.userId)
 
 const name = ref('')
 const history = ref<MoegirlArtifactSummary[]>([])
