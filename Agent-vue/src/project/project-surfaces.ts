@@ -66,7 +66,6 @@ export const PROJECT_MODULES: readonly ProjectModule[] = [
 export const PROJECT_LINKS: readonly ProjectLink[] = [
   { label: '官网', href: 'https://agentbi.39miku.tech/', external: true },
   { label: 'GitHub', href: 'https://github.com/39Mikku/AgentBI', external: true },
-  { label: 'elysiareal.me', href: 'http://elysiareal.me/', external: true },
 ]
 
 export function getNotFoundPrimaryAction(): ProjectAction {

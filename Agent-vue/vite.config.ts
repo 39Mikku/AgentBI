@@ -1,8 +1,14 @@
 import { fileURLToPath, URL } from 'node:url'
+import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
+
+const repoRoot = realpathSync(fileURLToPath(new URL('..', import.meta.url))).replace(/\\/g, '/').replace(/\/$/, '')
+const normalizedRoot = process.platform === 'win32' ? repoRoot.toLowerCase() : repoRoot
+const instanceId = `sha256:${createHash('sha256').update(normalizedRoot, 'utf8').digest('hex')}`
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -11,7 +17,7 @@ export default defineConfig({
     configureServer(server) {
       server.middlewares.use('/__agentbi', (_request, response) => {
         response.setHeader('Content-Type', 'application/json')
-        response.end(JSON.stringify({ instance: fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, '') }))
+        response.end(JSON.stringify({ instance: instanceId }))
       })
     },
   }],

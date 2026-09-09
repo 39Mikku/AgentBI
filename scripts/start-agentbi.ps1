@@ -65,7 +65,7 @@ function Invoke-HealthProbe {
     param([string]$Uri)
     try {
         $response = Invoke-RestMethod -Uri $Uri -TimeoutSec 2
-        return $response.instance -and ([IO.Path]::GetFullPath($response.instance).TrimEnd('\', '/') -eq $RepoRoot.TrimEnd('\', '/'))
+        return $response.instance -and ($response.instance -eq $ExpectedInstance)
     }
     catch { return $false }
 }
@@ -271,6 +271,10 @@ try {
         exit 0
     }
     $env:AGENTBI_BACKEND_URL = $BackendUrl.TrimEnd('/')
+    $ExpectedInstance = (& $venvPython (Join-Path $BackendDir "src\instance_identity.py")).Trim()
+    if ($LASTEXITCODE -ne 0 -or $ExpectedInstance -notmatch '^sha256:[a-f0-9]{64}$') {
+        Stop-WithError "读取工作台实例标识失败。"
+    }
 
     $backendHealthy = Test-AgentBIBackend
     if ($backendHealthy) {

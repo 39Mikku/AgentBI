@@ -18,6 +18,12 @@ const initials = computed(() => username.value.slice(0, 2).toUpperCase())
 const hour = computed(() => String(now.value.getHours()).padStart(2, '0'))
 const minute = computed(() => String(now.value.getMinutes()).padStart(2, '0'))
 const second = computed(() => String(now.value.getSeconds()).padStart(2, '0'))
+const timezone = computed(() => {
+  // Re-read alongside the clock so system timezone changes appear while the page is open.
+  now.value.getTime()
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || '本地时区'
+})
+const timezoneLabel = computed(() => timezone.value.replace(/_/g, ' ').replace(/\//g, ' / ').toUpperCase())
 
 onMounted(() => {
   clockTimer = setInterval(() => { now.value = new Date() }, 1_000)
@@ -52,7 +58,7 @@ onBeforeUnmount(() => {
 
     <section class="briefing-hero">
       <div class="hero-intro home-reveal" style="--delay: .06s">
-        <p class="section-label">LOCAL DESK · {{ Intl.DateTimeFormat().resolvedOptions().timeZone }}</p>
+        <p class="section-label">LOCAL DESK · {{ timezone }}</p>
         <h1>
           <span>{{ greetingForHour(now.getHours()) }}，</span>
           {{ username }}<em>。</em>
@@ -62,7 +68,7 @@ onBeforeUnmount(() => {
 
       <div class="hero-clock home-reveal" style="--delay: .12s" aria-label="当前时间">
         <div><span>{{ hour }}</span><i>:</i><span>{{ minute }}</span><small>{{ second }}</small></div>
-        <p>ASIA / SHANGHAI <b>LIVE</b></p>
+        <p>{{ timezoneLabel }} <b>LIVE</b></p>
       </div>
 
       <HomeQuotePanel class="quote-column home-reveal" style="--delay: .18s" />
