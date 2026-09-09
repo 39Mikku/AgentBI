@@ -10,7 +10,7 @@
 ![Local](https://img.shields.io/badge/workspace-local_first-EEECE6?style=flat-square&labelColor=171717)
 ![Stack](https://img.shields.io/badge/Vue_3_×_FastAPI_×_SQLite-80F4DB?style=flat-square&labelColor=171717)
 
-[项目官网](https://agentbi.39miku.tech/) · [快速开始](#快速开始) · [能力配置](#能力配置) · [开发说明](docs/development.md)
+[项目官网](https://agentbi.39miku.tech/) · [快速开始](#快速开始) · [能力配置](#能力配置) · [本地资料与数据](#本地资料与数据)
 
 </div>
 
@@ -29,15 +29,6 @@ AgentBI 起于学校就业实训，后来逐渐变成日常使用的个人工作
 | **Toolbox** | TTS 对比、表情包制作、萌娘百科归档、文件时间管理及自动输入 |
 
 消息分支基于 DAG 保存。上下文可使用滚动窗口或后台压缩；完整原始消息继续保留。工具、正文与子代理过程按实际时间线展示。
-
-![本地工作台首页](docs/screenshots/workspace.png)
-
-<details>
-<summary>Studio 界面（本地模拟模型验收）</summary>
-
-![Studio](docs/screenshots/studio.png)
-
-</details>
 
 ## 快速开始
 
@@ -100,7 +91,7 @@ npm --prefix AgentBI/vendor/netease-music-api ci
 npm --prefix Agent-vue run dev
 ```
 
-macOS/Linux 可用 `python3 -m venv venv`，将上述 Python 路径替换为 `./venv/bin/python`，用 `cp` 复制示例配置。当前验证平台为 Windows；自动输入为 Windows 桌面专用，其他平台的完整体验仍待验证。
+Windows 为主要运行平台。macOS/Linux 可用 `python3 -m venv venv`，将上述 Python 路径替换为 `./venv/bin/python`，用 `cp` 复制示例配置；自动输入功能仅支持 Windows 桌面。
 
 ## 能力配置
 
@@ -145,8 +136,8 @@ macOS/Linux 可用 `python3 -m venv venv`，将上述 Python 路径替换为 `./
 - **音乐不可用**：确认 vendor 依赖安装完成，检查 `/api/music/status` 与后端日志。
 - **历史资料选择错误**：可在浏览器调用 `PUT /api/workspace`，提交 `{"user_id":"原资料ID"}` 后刷新。可选 ID 由 `GET /api/workspace` 的 `profiles` 返回。
 
-## 开发与许可
+## 许可
 
-目录结构、测试命令和依赖更新方式见 [开发说明](docs/development.md)，本轮安装与运行结果见 [验收记录](docs/verification.md)。项目保持本地个人工具定位，欢迎可复现的问题反馈与小范围改进。
+项目保持本地个人工具定位，欢迎可复现的问题反馈与小范围改进。
 
 本仓库原创代码采用 [MIT License](LICENSE)，Copyright © 2026 39Mikku。第三方依赖保留各自许可。
