@@ -75,18 +75,18 @@ defineProps<{
 .entry-index {
   position: relative;
   z-index: 2;
-  font: 500 9px 'DM Mono', monospace;
+  font: 500 var(--control-font-size) 'DM Mono', monospace;
   letter-spacing: .14em;
   text-transform: uppercase;
   opacity: .62;
 }
 .entry-art { position: absolute; inset: 48px 22px auto; height: 90px; }
 .entry-copy { position: absolute; left: 22px; right: 22px; bottom: 48px; z-index: 2; }
-.entry-copy p { max-width: 250px; margin-bottom: 6px; color: #77746d; font-size: 10px; transition: color .35s; }
+.entry-copy p { max-width: 250px; margin-bottom: 6px; color: #77746d; font-size: var(--control-font-size); transition: color .35s; }
 .module-entry:hover .entry-copy p,
 .module-entry:focus-visible .entry-copy p { color: rgba(17,17,15,.6); }
 .entry-copy h2 { font: 700 clamp(34px, 4vw, 58px)/.88 Manrope, sans-serif; letter-spacing: -.07em; text-transform: uppercase; }
-.entry-action { position: absolute; right: 20px; bottom: 18px; z-index: 2; font: 500 9px 'DM Mono', monospace; letter-spacing: .08em; }
+.entry-action { position: absolute; right: 20px; bottom: 18px; z-index: 2; font: 500 var(--control-font-size) 'DM Mono', monospace; letter-spacing: .08em; }
 .entry-action b { display: inline-block; margin-left: 5px; transition: transform .3s; }
 .module-entry:hover .entry-action b { transform: translate(3px,-3px); }
 
@@ -110,7 +110,7 @@ defineProps<{
 .module-entry--paper::after { background: var(--entry-accent); }
 .module-entry--paper .entry-copy p { color: #6d6a62; }
 .module-entry--paper .entry-art { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; border: 1px solid rgba(17,17,15,.25); }
-.module-entry--paper .entry-art span { display: grid; place-items: center; border-right: 1px solid rgba(17,17,15,.18); font: 10px 'DM Mono', monospace; }
+.module-entry--paper .entry-art span { display: grid; place-items: center; border-right: 1px solid rgba(17,17,15,.18); font: var(--control-font-size) 'DM Mono', monospace; }
 .module-entry--paper .entry-art span:last-child { border: 0; }
 .module-entry--paper:hover .entry-art span:nth-child(3) { background: #11110f; color: var(--entry-accent); }
 

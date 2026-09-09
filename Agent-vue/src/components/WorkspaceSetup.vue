@@ -34,5 +34,5 @@ p { line-height: 1.8; }
 .profiles { display: grid; gap: 10px; margin-top: 28px; }
 button { text-align: left; padding: 18px; background: #fffdf7; color: inherit; border: 1px solid #bdb9ad; cursor: pointer; display: grid; gap: 6px; }
 button:hover, button:focus-visible { background: #d9ff36; outline: 2px solid #171717; outline-offset: 2px; }
-button span { font-size: 12px; overflow-wrap: anywhere; }
+button span { font-size: var(--control-font-size); overflow-wrap: anywhere; }
 </style>

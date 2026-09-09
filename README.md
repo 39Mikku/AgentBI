@@ -61,6 +61,10 @@ Set-Location AgentBI
 
 主工作台可以在空配置下打开；模型调用在配置供应商后启用。邮件账户仅用于邮件能力。
 
+### 首页格言
+
+点击格言区的 **自定义格言**，可编辑内容与署名、添加或删除条目；保存后按列表顺序轮播。自定义内容随当前本地资料存入 SQLite，点击 **恢复预置格言** 可切回默认列表。
+
 ### 手动启动
 
 在仓库根目录初始化后端：
@@ -135,6 +139,31 @@ Windows 为主要运行平台。macOS/Linux 可用 `python3 -m venv venv`，将�
 - **进入页面但模型无法调用**：在模型工作室确认供应商、API 地址与模型选择。
 - **音乐不可用**：确认 vendor 依赖安装完成，检查 `/api/music/status` 与后端日志。
 - **历史资料选择错误**：可在浏览器调用 `PUT /api/workspace`，提交 `{"user_id":"原资料ID"}` 后刷新。可选 ID 由 `GET /api/workspace` 的 `profiles` 返回。
+
+## 来源与致谢
+
+首页预置格言来自米哈游游戏《崩坏：星穹铁道》，署名对应游戏角色，相关文本的权利归原权利人所有。
+
+以下项目为 AgentBI 的相关功能提供了参考：
+
+| 参考项目 | 参考内容 |
+| --- | --- |
+| [Cherry Studio](https://github.com/CherryHQ/cherry-studio) | 会话分支功能 |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Codex OAuth 登录与连接实现 |
+| [EmojiCut](https://github.com/Rayinf/EmojiCut) | 表情包制作与切图功能 |
+
+项目使用的主要开源依赖：
+
+| 用途 | 依赖 |
+| --- | --- |
+| 前端界面与构建 | Vue、Vue Router、Pinia、TypeScript、Vite |
+| Markdown、导出与图标 | Marked、DOMPurify、JSZip、Simple Icons |
+| 后端 API 与配置 | FastAPI、Uvicorn、Pydantic、python-dotenv、python-multipart、tzdata |
+| 模型调用与编排 | OpenAI Python SDK、LangChain、langchain-openai |
+| 网络与内容处理 | HTTPX、websockets、Beautiful Soup、html2text、python-docx |
+| 音乐与视频信息 | [NeteaseCloudMusicApiEnhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)、[bilibili-cli](https://github.com/public-clis/bilibili-cli) |
+
+直接依赖与版本范围见 [前端清单](Agent-vue/package.json)、[后端清单](AgentBI/requirements.txt) 和 [音乐服务清单](AgentBI/vendor/netease-music-api/package.json)，具体安装版本由各自锁定文件记录。
 
 ## 许可
 

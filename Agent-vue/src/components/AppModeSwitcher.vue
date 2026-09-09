@@ -24,7 +24,7 @@ withDefaults(defineProps<{ active: 'studio' | 'live' | 'test' | 'playground'; co
 <style scoped>
 .mode-switcher {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.035);
   padding: 3px;
@@ -36,8 +36,8 @@ withDefaults(defineProps<{ active: 'studio' | 'live' | 'test' | 'playground'; co
   grid-template-columns: auto 1fr;
   grid-template-rows: auto auto;
   align-items: center;
-  column-gap: 7px;
-  padding: 8px 9px 7px;
+  column-gap: 5px;
+  padding: 9px 5px 8px;
   color: rgba(255, 255, 255, 0.38);
   text-decoration: none;
   position: relative;
@@ -54,14 +54,13 @@ withDefaults(defineProps<{ active: 'studio' | 'live' | 'test' | 'playground'; co
 }
 .mode-index {
   grid-row: 1 / 3;
-  font: 8px/1 'DM Mono', monospace;
-  letter-spacing: 0.08em;
+  font: var(--control-font-size)/1 'DM Mono', monospace;
+  letter-spacing: 0;
   opacity: 0.58;
 }
 .mode-switcher strong {
-  font: 600 10px/1.2 Manrope, sans-serif;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 600 var(--control-font-size)/1.2 Manrope, sans-serif;
+  letter-spacing: 0;
 }
 .mode-switcher i {
   width: 100%;
@@ -90,7 +89,7 @@ withDefaults(defineProps<{ active: 'studio' | 'live' | 'test' | 'playground'; co
 }
 .mode-switcher.collapsed .mode-index {
   grid-row: auto;
-  font-size: 9px;
+  font-size: var(--control-font-size);
   opacity: 0.82;
 }
 .mode-switcher.collapsed strong,

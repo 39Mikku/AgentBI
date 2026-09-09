@@ -92,6 +92,7 @@ nav {
 
 a {
   position: relative;
+  font-size: var(--control-font-size);
   color: var(--footer-ink);
   text-decoration: none;
   white-space: nowrap;

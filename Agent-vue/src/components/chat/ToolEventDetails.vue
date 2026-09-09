@@ -56,7 +56,7 @@ const detail = computed(() => formatToolEventContent(props.content))
 .tool-event summary i {
   margin-left: auto;
   color: #8a8880;
-  font-size: 9px;
+  font-size: var(--control-font-size);
   font-style: normal;
 }
 .tool-event-result[open] summary i {

@@ -74,6 +74,7 @@
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Sora', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --control-font-size: 13px;
 
   /* RADIUS */
   --radius: 1.2rem;

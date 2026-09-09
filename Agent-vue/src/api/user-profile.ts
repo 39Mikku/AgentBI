@@ -1,10 +1,16 @@
 const BASE = '/api'
 
+export interface HomeQuote {
+  text: string
+  speaker: string
+}
+
 export interface UserProfile {
   user_id: string
   username: string
   email?: string | null
   avatar_data_url?: string | null
+  home_quotes?: HomeQuote[] | null
 }
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -14,6 +20,13 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const getUserProfile = (userId: string) => json<UserProfile>(`/user-profile?user_id=${encodeURIComponent(userId)}`)
+
+export const saveHomeQuotes = (userId: string, quotes: HomeQuote[] | null) =>
+  json<UserProfile>(`/user-profile/quotes?user_id=${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ home_quotes: quotes }),
+  })
 
 export const saveUserAvatar = (userId: string, avatarDataUrl: string) =>
   json<UserProfile>(`/user-profile/avatar?user_id=${encodeURIComponent(userId)}`, {

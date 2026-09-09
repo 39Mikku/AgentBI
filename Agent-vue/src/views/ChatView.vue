@@ -783,7 +783,7 @@ onMounted(async () => {
 .new-session kbd {
   float: right;
   color: #838383;
-  font: 10px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
   padding-top: 4px;
 }
 .new-session:hover {
@@ -822,16 +822,16 @@ onMounted(async () => {
   color: #111;
   display: grid;
   place-items: center;
-  font: 9px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
 }
 .assistant-current .assistant-brand-avatar { padding:5px; background:#111; }
 .assistant-current small {
-  font: 8px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
   letter-spacing: 0.1em;
   color: #858585;
 }
 .assistant-current strong {
-  font: 11px Manrope;
+  font: var(--control-font-size) Manrope;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -863,7 +863,7 @@ onMounted(async () => {
   color: #c9c9c5;
   padding: 8px;
   text-align: left;
-  font: 11px Manrope;
+  font: var(--control-font-size) Manrope;
   cursor: pointer;
 }
 .assistant-menu button:hover,
@@ -882,7 +882,7 @@ onMounted(async () => {
   color: #111;
   display: grid;
   place-items: center;
-  font: 8px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
 }
 .assistant-menu .assistant-menu-brand { flex:0 0 auto; padding:4px; background:#111; }
 .assistant-menu .assistant-manage {
@@ -942,7 +942,7 @@ onMounted(async () => {
   color: #a9a9a9;
   padding: 10px;
   text-align: left;
-  font: 500 12px Manrope;
+  font: 500 var(--control-font-size) Manrope;
   cursor: pointer;
   transition: 0.2s;
 }
@@ -1013,7 +1013,7 @@ onMounted(async () => {
   background: #333;
   color: #fff;
   padding: 3px 5px;
-  font: 500 12px Manrope;
+  font: 500 var(--control-font-size) Manrope;
 }
 .empty-list {
   color: #666;
@@ -1033,13 +1033,13 @@ onMounted(async () => {
   color: #999;
   padding: 8px;
   text-align: left;
-  font: 11px Manrope;
+  font: var(--control-font-size) Manrope;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.footer-icon { width:16px; flex:0 0 auto; text-align:center; color:var(--acid); font:11px 'DM Mono'; }
+.footer-icon { width:16px; flex:0 0 auto; text-align:center; color:var(--acid); font:var(--control-font-size) 'DM Mono'; }
 .rail-footer > button:hover {
   color: var(--acid);
 }
@@ -1060,7 +1060,7 @@ onMounted(async () => {
   color: #111;
   display: grid;
   place-items: center;
-  font: 9px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
 }
 .user-card strong,
 .user-card small {
@@ -1071,11 +1071,11 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 .user-card strong {
-  font-size: 11px;
+  font-size: var(--control-font-size);
   color: #e9e8df;
 }
 .user-card small {
-  font: 9px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
   color: #777;
   margin-top: 2px;
 }
@@ -1120,7 +1120,7 @@ onMounted(async () => {
   background: var(--cream);
   padding: 5px 11px 5px 5px;
   border-radius: 30px;
-  font: 11px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
   cursor: pointer;
 }
 .live-dot {
@@ -1177,7 +1177,7 @@ onMounted(async () => {
   border: 1px solid var(--line);
   padding: 17px 14px;
   text-align: left;
-  font: 600 12px/1.4 Manrope;
+  font: 600 var(--control-font-size)/1.4 Manrope;
   cursor: pointer;
   min-height: 84px;
   transition: 0.25s;
@@ -1457,7 +1457,7 @@ textarea {
   background: transparent;
   color: #77746c;
   cursor: pointer;
-  font: 700 9px 'DM Mono';
+  font: 700 var(--control-font-size) 'DM Mono';
   transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 .thinking-control button:hover {
@@ -1482,7 +1482,7 @@ textarea {
   cursor: not-allowed;
 }
 .stop {
-  font-size: 10px;
+  font-size: var(--control-font-size);
   background: #1b1b1b;
   color: #fff;
 }
@@ -1847,7 +1847,7 @@ textarea {
   display: block;
   margin-bottom: 4px;
   color: #8c8a84;
-  font: 9px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1897,7 +1897,7 @@ textarea {
 }
 .conversation-date {
   color: #777;
-  font: 9px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
   letter-spacing: 0.03em;
 }
 .conversation-row.active .conversation-date {
@@ -1942,7 +1942,7 @@ textarea {
   background: transparent;
   color: #777;
   padding: 3px 6px;
-  font: 10px 'DM Mono';
+  font: var(--control-font-size) 'DM Mono';
   cursor: pointer;
 }
 .message-actions button:hover,

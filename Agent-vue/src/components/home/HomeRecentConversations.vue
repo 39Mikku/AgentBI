@@ -78,21 +78,21 @@ onMounted(loadRecent)
 .recent-panel header { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
 .recent-panel header span { display: block; margin-bottom: 5px; color: #767269; font: 500 8px 'DM Mono', monospace; letter-spacing: .16em; }
 .recent-panel h2 { font: 600 clamp(26px,3vw,42px)/1 'Playfair Display', serif; letter-spacing: -.04em; }
-.recent-panel header > a { font: 500 9px 'DM Mono', monospace; border-bottom: 1px solid currentColor; padding-bottom: 3px; }
+.recent-panel header > a { font: 500 var(--control-font-size) 'DM Mono', monospace; border-bottom: 1px solid currentColor; padding-bottom: 3px; }
 .recent-list { list-style: none; }
 .recent-list li { border-top: 1px solid #cac5b9; }
 .recent-list li:last-child { border-bottom: 1px solid #cac5b9; }
 .recent-list a { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 12px; min-height: 72px; padding: 10px 2px; transition: padding .25s, background .25s; }
 .recent-list a:hover, .recent-list a:focus-visible { padding-inline: 12px; background: rgba(17,17,15,.045); outline: none; }
-.recent-number { color: #89857c; font: 9px 'DM Mono', monospace; }
+.recent-number { color: #89857c; font: var(--control-font-size) 'DM Mono', monospace; }
 .recent-list strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 650; }
-.recent-list small { display: block; margin-top: 4px; color: #7c786f; font: 8px 'DM Mono', monospace; }
+.recent-list small { display: block; margin-top: 4px; color: #7c786f; font: var(--control-font-size) 'DM Mono', monospace; }
 .recent-list b { font-size: 18px; font-weight: 400; transition: transform .25s; }
 .recent-list a:hover b { transform: translateX(5px); }
 .recent-loading { display: grid; gap: 1px; background: #cac5b9; }
 .recent-loading i { display: block; height: 72px; background: linear-gradient(90deg,#e4e0d6 25%,#eeebe2 40%,#e4e0d6 60%); background-size: 300% 100%; animation: recent-shimmer 1.35s infinite; }
 .recent-empty { min-height: 160px; display: grid; place-content: center; justify-items: center; gap: 10px; border-block: 1px solid #cac5b9; color: #77736b; font-size: 12px; }
-.recent-empty a { color: #171713; font: 9px 'DM Mono', monospace; }
+.recent-empty a { color: #171713; font: var(--control-font-size) 'DM Mono', monospace; }
 @keyframes recent-shimmer { to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .recent-loading i { animation: none; } }
 </style>

@@ -1,6 +1,18 @@
+import json
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class HomeQuote(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    text: str = Field(min_length=1, max_length=1000)
+    speaker: str = Field(default="", max_length=100)
+
+
+class HomeQuotesUpdate(BaseModel):
+    home_quotes: list[HomeQuote] | None = Field(default=None, min_length=1, max_length=100)
 
 
 class UserAvatarUpdate(BaseModel):
@@ -16,6 +28,7 @@ class UserProfileResponse(BaseModel):
     username: str
     email: str | None = None
     avatar_data_url: str | None = None
+    home_quotes: list[HomeQuote] | None = None
 
     @classmethod
     def from_documents(
@@ -33,4 +46,5 @@ class UserProfileResponse(BaseModel):
             username=username,
             email=email,
             avatar_data_url=profile.get("avatar_data_url"),
+            home_quotes=json.loads(user["home_quotes"]) if user.get("home_quotes") else None,
         )

@@ -113,7 +113,7 @@ header > span { color: rgb(241 239 232 / .36); font: 8px 'DM Mono', monospace; l
 .error-path small { color: rgb(241 239 232 / .38); font: 8px 'DM Mono', monospace; letter-spacing: .12em; }
 .error-path code { max-width: 100%; overflow: hidden; color: var(--error-paper); font: 12px 'DM Mono', monospace; text-overflow: ellipsis; white-space: nowrap; }
 .error-stage nav { display: flex; align-items: center; justify-content: flex-end; gap: 18px; }
-.error-stage nav a { min-height: 54px; display: inline-flex; align-items: center; justify-content: center; padding: 0 22px; font: 9px 'DM Mono', monospace; letter-spacing: .08em; text-decoration: none; text-transform: uppercase; }
+.error-stage nav a { min-height: 54px; display: inline-flex; align-items: center; justify-content: center; padding: 0 22px; font: var(--control-font-size) 'DM Mono', monospace; letter-spacing: .08em; text-decoration: none; text-transform: uppercase; }
 .primary-action { min-width: 190px; justify-content: space-between !important; background: var(--error-acid); color: var(--error-ink); box-shadow: 5px 5px 0 rgb(204 255 36 / .18); }
 .primary-action b { font-size: 16px; font-weight: 400; }
 .secondary-action { border: 1px solid rgb(241 239 232 / .28); color: var(--error-paper); }

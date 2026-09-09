@@ -277,6 +277,7 @@ class SqliteChatRepository:
                 self._ensure_column("chat_preferences", name, definition)
             for name, definition in video_job_columns.items():
                 self._ensure_column("video_generation_jobs", name, definition)
+            self._ensure_column("users", "home_quotes", "TEXT")
 
     def _ensure_column(self, table: str, name: str, definition: str) -> None:
         columns = {row[1] for row in self._connection.execute(f"PRAGMA table_info({table})")}
@@ -1197,12 +1198,14 @@ class SqliteChatRepository:
                 suffix += 1
         now = self._time()
         with self._lock, self._connection:
-            self._connection.execute("INSERT INTO users VALUES (?, ?, ?, NULL, ?, ?)", (normalized_email, candidate, normalized_email, now, now))
+            self._connection.execute("INSERT INTO users(user_id, username, email, avatar_data_url, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)", (normalized_email, candidate, normalized_email, now, now))
         return self.find_user(normalized_email)  # type: ignore[return-value]
 
     def update_user(self, user_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
-        allowed = {"username", "avatar_data_url"}
+        allowed = {"username", "avatar_data_url", "home_quotes"}
         values = {key: value for key, value in fields.items() if key in allowed}
+        if values.get("home_quotes") is not None:
+            values["home_quotes"] = self._json_dump(values["home_quotes"])
         if not values:
             return self.find_user(user_id)
         assignments = [f"{key} = ?" for key in values]
@@ -1220,7 +1223,7 @@ class SqliteChatRepository:
             if not users:
                 now = self._time()
                 self._connection.execute(
-                    "INSERT INTO users VALUES (?, ?, ?, NULL, ?, ?)",
+                    "INSERT INTO users(user_id, username, email, avatar_data_url, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)",
                     ("local-user", "本地用户", "", now, now),
                 )
                 users = [dict(self._one("SELECT * FROM users WHERE user_id = ?", ("local-user",)))]
