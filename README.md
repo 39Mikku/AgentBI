@@ -12,7 +12,7 @@ Studio、实时语音、测试实验室与实用工具共享同一套本地身�
 ![Workspace](https://img.shields.io/badge/workspace-private-EEECE6?style=flat-square&labelColor=171717)
 ![Stack](https://img.shields.io/badge/Vue_3_×_FastAPI_×_SQLite-80F4DB?style=flat-square&labelColor=171717)
 
-[项目网站](http://elysiareal.me/) · `LOCAL FIRST` · `MULTI MODEL` · `AGENT READY`
+[项目网站](https://agentbi.39miku.tech/) · `LOCAL FIRST` · `MULTI MODEL` · `AGENT READY`
 
 </div>
 
